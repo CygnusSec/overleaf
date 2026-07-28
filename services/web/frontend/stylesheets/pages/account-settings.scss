@@ -13,7 +13,7 @@
 }
 
 .affiliations-table-row-highlighted {
-  background-color: var(--bg-light-secondary);
+  background-color: var(--bg-secondary-themed);
 }
 
 .affiliation-change-container {
@@ -57,7 +57,7 @@
 }
 
 .settings-widgets-container {
-  border: 1px solid var(--border-divider);
+  border: 1px solid var(--border-divider-themed);
 
   hr {
     margin: 0 var(--spacing-05);
@@ -145,16 +145,16 @@
 
 .security-row {
   .line-header > b {
-    color: var(--content-primary);
+    color: var(--content-primary-themed);
   }
 
-  color: var(--content-secondary);
+  color: var(--content-secondary-themed);
   display: flex;
   flex-direction: row;
   padding: var(--spacing-03) 0;
 
   .icon {
-    color: var(--content-primary);
+    color: var(--content-primary-themed);
     display: flex;
     flex: 1 1 7%;
     padding: 0 var(--spacing-06);
@@ -188,8 +188,8 @@
     }
 
     &.status-label-ready {
-      background-color: var(--bg-light-tertiary);
-      color: var(--content-primary);
+      background-color: var(--bg-tertiary-themed);
+      color: var(--content-primary-themed);
     }
   }
 }
@@ -205,7 +205,7 @@
 #settings-page-root,
 #action-project-modal {
   &#settings-page-root .confirm-email-form {
-    background: var(--bg-light-secondary);
+    background: var(--bg-secondary-themed);
   }
 
   .confirm-email-form-inner {

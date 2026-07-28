@@ -15,7 +15,8 @@
       gap: var(--spacing-04);
       margin: 0 auto;
       padding: 0;
-      border-bottom: var(--border-width-base) solid var(--border-divider);
+      border-bottom: var(--border-width-base) solid
+        var(--border-divider-themed);
       text-align: center;
       border-top: 2px solid transparent; // so that top focus border is visible
       min-width: max-content; // This is for horizontal scrolling
@@ -33,7 +34,7 @@
         button {
           border: 0;
           border-radius: 0;
-          color: var(--content-secondary);
+          color: var(--content-secondary-themed);
           margin-right: unset;
           padding: var(--spacing-04);
           line-height: var(--line-height-03);
@@ -51,7 +52,7 @@
           }
 
           &:hover {
-            background-color: var(--bg-light-secondary);
+            background-color: var(--bg-secondary-themed);
             text-decoration: none;
           }
 
@@ -66,7 +67,7 @@
         background-color: transparent;
         border: 0;
         border-bottom: 3px solid var(--green-50);
-        color: var(--content-primary);
+        color: var(--content-primary-themed);
       }
 
       &.align-left {

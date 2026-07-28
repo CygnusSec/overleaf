@@ -294,7 +294,7 @@
 
 .form-text {
   .form-control[disabled] ~ & {
-    color: var(--content-disabled);
+    color: var(--content-disabled-themed);
   }
 
   .form-text-inner {
@@ -313,8 +313,10 @@
 }
 
 .form-label {
+  color: var(--content-primary-themed);
+
   &:has(+ .form-control[disabled], + .form-control-wrapper-disabled) {
-    color: var(--content-disabled);
+    color: var(--content-disabled-themed);
   }
 }
 
@@ -329,7 +331,7 @@
     .form-control-start-icon,
     .form-control-end-icon {
       & > * {
-        color: var(--content-disabled);
+        color: var(--content-disabled-themed);
       }
     }
   }
@@ -438,7 +440,7 @@
 
 .website-redesign {
   label {
-    color: $form-text-color;
+    color: var(--content-primary-themed);
     display: inline-block;
     margin-bottom: var(--spacing-02);
     font-weight: bold;
@@ -488,7 +490,13 @@ input[type='range'] {
 }
 
 input.form-control[type='text'],
-input.form-control[type='search'] {
+input.form-control[type='search'],
+input.form-control[type='email'],
+input.form-control[type='password'],
+input.form-control[type='url'],
+input.form-control[type='tel'],
+input.form-control[type='number'],
+textarea.form-control {
   color: var(--input-field-color);
   background-color: var(--input-field-bg);
   border-color: var(--input-field-border-color);

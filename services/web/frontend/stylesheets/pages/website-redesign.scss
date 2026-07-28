@@ -18,6 +18,19 @@
   }
 }
 
+@include theme('default') {
+  .website-redesign {
+    --bs-body-color: var(--content-primary-dark);
+    --link-color: var(--link-web-dark);
+    --link-hover-color: var(--link-web-hover-dark);
+    --link-visited-color: var(--link-web-visited-dark);
+
+    .card.page-content-card {
+      --bs-card-bg: var(--bg-dark-primary);
+    }
+  }
+}
+
 @mixin reset-font-size($size) {
   p,
   ul,
@@ -303,7 +316,7 @@
   }
 
   .card {
-    --bs-card-bg: var(--neutral-10);
+    --bs-card-bg: var(--bg-primary-themed);
     --bs-card-border-radius: var(--border-radius-large);
 
     &.page-content-card {
@@ -316,7 +329,7 @@
   }
 
   .content-alt {
-    background-color: var(--bg-light-primary);
+    background-color: var(--bg-secondary-themed);
   }
 
   .page-header {
