@@ -5,6 +5,7 @@ import type {
 import OLRow from '@/shared/components/ol/ol-row'
 import LanguagePicker from '@/shared/components/language-picker'
 import React from 'react'
+import getMeta from '@/utils/meta'
 
 function FooterItemLi({
   text,
@@ -46,6 +47,7 @@ function ThinFooter({
   leftItems,
   rightItems,
 }: FooterMetadata) {
+  const { appName, siteUrl } = getMeta('ol-ExposedSettings')
   const showLanguagePicker = Boolean(
     subdomainLang && Object.keys(subdomainLang).length > 1
   )
@@ -60,10 +62,8 @@ function ThinFooter({
             {showPoweredBy ? (
               <>
                 <li>
-                  {/* year of Server Pro release, static */}© 2025{' '}
-                  <a href="https://www.overleaf.com/for/enterprises">
-                    Powered by Overleaf
-                  </a>
+                  © {new Date().getFullYear()}{' '}
+                  <a href={siteUrl}>Powered by {appName || 'Overleaf'}</a>
                 </li>
                 {showLanguagePicker || hasCustomLeftNav ? <Separator /> : null}
               </>

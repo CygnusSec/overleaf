@@ -6,10 +6,9 @@ footer.site-footer
 			ul.site-footer-items.col-lg-9
 				if !settings.nav.hide_powered_by
 					li
-						//- year of Server Pro release, static
-						| © 2025
+						| © #{new Date().getFullYear()}
 						|
-						a(href='https://www.overleaf.com/for/enterprises') Powered by Overleaf
+						a(href=settings.siteUrl) Powered by #{settings.appName || 'Overleaf'}
 
 					if showLanguagePicker || hasCustomLeftNav
 						li
