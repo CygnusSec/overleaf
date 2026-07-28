@@ -41,6 +41,11 @@ export default {
       AuthorizationMiddleware.ensureUserIsSiteAdmin,
       UserActivateController.setUserSuspended
     )
+    webRouter.post(
+      '/admin/users/:userId/password-reset',
+      AuthorizationMiddleware.ensureUserIsSiteAdmin,
+      UserActivateController.resetManagedUserPassword
+    )
     webRouter.delete(
       '/admin/users/:userId',
       AuthorizationMiddleware.ensureUserIsSiteAdmin,

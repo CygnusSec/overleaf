@@ -6,6 +6,7 @@ import UserUpdater from '../../../../app/src/Features/User/UserUpdater.mjs'
 import UserDeleter from '../../../../app/src/Features/User/UserDeleter.mjs'
 import SessionManager from '../../../../app/src/Features/Authentication/SessionManager.mjs'
 import EmailHelper from '../../../../app/src/Features/Helpers/EmailHelper.mjs'
+import PasswordResetHandler from '../../../../app/src/Features/PasswordReset/PasswordResetHandler.mjs'
 import { User } from '../../../../app/src/models/User.mjs'
 import ErrorController from '../../../../app/src/Features/Errors/ErrorController.mjs'
 import { expressify } from '@overleaf/promise-utils'
@@ -48,6 +49,7 @@ async function ensureManageableUser(req, res) {
     email: 1,
     isAdmin: 1,
     adminRoles: 1,
+    suspended: 1,
   }).exec()
   if (!user) {
     res.sendStatus(404)
@@ -187,6 +189,24 @@ async function setUserSuspended(req, res) {
   res.sendStatus(204)
 }
 
+async function resetManagedUserPassword(req, res) {
+  const user = await ensureManageableUser(req, res)
+  if (!user) return
+  if (user.suspended) {
+    return res.status(409).json({
+      message: 'Reactivate this account before resetting its password.',
+    })
+  }
+  const status =
+    await PasswordResetHandler.promises.generateAndEmailResetToken(user.email)
+  if (status !== 'primary') {
+    return res.status(422).json({
+      message: 'Unable to send a password reset email for this account.',
+    })
+  }
+  res.json({ message: `Password reset email sent to ${user.email}.` })
+}
+
 async function deleteManagedUser(req, res) {
   const user = await ensureManageableUser(req, res)
   if (!user) return
@@ -241,6 +261,7 @@ export default {
   listUsers: expressify(listUsers),
   updateManagedUser: expressify(updateManagedUser),
   setUserSuspended: expressify(setUserSuspended),
+  resetManagedUserPassword: expressify(resetManagedUserPassword),
   deleteManagedUser: expressify(deleteManagedUser),
   activateAccountPage: expressify(activateAccountPage),
 }

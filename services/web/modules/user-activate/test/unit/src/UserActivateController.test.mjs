@@ -29,6 +29,7 @@ describe('UserActivateController', function () {
       getLoggedInUserId: sinon.stub().returns(ctx.user_id),
     }
     ctx.EmailHelper = { parseEmail: sinon.stub() }
+    ctx.PasswordResetHandler = { promises: {} }
     ctx.User = {}
     ctx.ErrorController = { notFound: sinon.stub() }
     ctx.SplitTestHandler = {
@@ -62,6 +63,10 @@ describe('UserActivateController', function () {
     vi.doMock(
       '../../../../../app/src/Features/Helpers/EmailHelper.mjs',
       () => ({ default: ctx.EmailHelper })
+    )
+    vi.doMock(
+      '../../../../../app/src/Features/PasswordReset/PasswordResetHandler.mjs',
+      () => ({ default: ctx.PasswordResetHandler })
     )
     vi.doMock('../../../../../app/src/models/User.mjs', () => ({
       User: ctx.User,

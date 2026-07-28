@@ -165,6 +165,7 @@ function UserRow({ user, reload }) {
   const [isEditing, setIsEditing] = useState(false)
   const [isWorking, setIsWorking] = useState(false)
   const [error, setError] = useState('')
+  const [message, setMessage] = useState('')
   const [form, setForm] = useState({
     email: user.email,
     firstName: user.firstName,
@@ -174,6 +175,7 @@ function UserRow({ user, reload }) {
   async function run(action) {
     setIsWorking(true)
     setError('')
+    setMessage('')
     try {
       await action()
       await reload()
@@ -205,6 +207,27 @@ function UserRow({ user, reload }) {
         body: { suspended: !user.suspended },
       })
     )
+  }
+
+  async function resetPassword() {
+    if (
+      !window.confirm(
+        `Send a password reset email to ${user.email}? Existing sessions and the current password remain valid until the password is changed.`
+      )
+    ) {
+      return
+    }
+    setIsWorking(true)
+    setError('')
+    setMessage('')
+    try {
+      const result = await postJSON(`/admin/users/${user.id}/password-reset`)
+      setMessage(result.message)
+    } catch (actionError) {
+      setError(actionError.getUserFacingMessage?.() || 'Action failed.')
+    } finally {
+      setIsWorking(false)
+    }
   }
 
   function deleteUser() {
@@ -269,6 +292,7 @@ function UserRow({ user, reload }) {
           </>
         )}
         {error ? <div className="text-danger small">{error}</div> : null}
+        {message ? <div className="text-success small">{message}</div> : null}
       </td>
       <td>
         <span
@@ -318,6 +342,14 @@ function UserRow({ user, reload }) {
                 disabled={!user.canManage || isWorking}
               >
                 Edit
+              </OLButton>
+              <OLButton
+                size="sm"
+                variant="secondary"
+                onClick={resetPassword}
+                disabled={!user.canManage || user.suspended || isWorking}
+              >
+                Reset password
               </OLButton>
               <OLButton
                 size="sm"
