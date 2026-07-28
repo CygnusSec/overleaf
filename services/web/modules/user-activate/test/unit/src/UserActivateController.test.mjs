@@ -23,6 +23,13 @@ describe('UserActivateController', function () {
       },
     }
     ctx.UserRegistrationHandler = { promises: {} }
+    ctx.UserUpdater = { promises: {} }
+    ctx.UserDeleter = { promises: {} }
+    ctx.SessionManager = {
+      getLoggedInUserId: sinon.stub().returns(ctx.user_id),
+    }
+    ctx.EmailHelper = { parseEmail: sinon.stub() }
+    ctx.User = {}
     ctx.ErrorController = { notFound: sinon.stub() }
     ctx.SplitTestHandler = {
       promises: {
@@ -40,6 +47,25 @@ describe('UserActivateController', function () {
         default: ctx.UserRegistrationHandler,
       })
     )
+    vi.doMock(
+      '../../../../../app/src/Features/User/UserUpdater.mjs',
+      () => ({ default: ctx.UserUpdater })
+    )
+    vi.doMock(
+      '../../../../../app/src/Features/User/UserDeleter.mjs',
+      () => ({ default: ctx.UserDeleter })
+    )
+    vi.doMock(
+      '../../../../../app/src/Features/Authentication/SessionManager.mjs',
+      () => ({ default: ctx.SessionManager })
+    )
+    vi.doMock(
+      '../../../../../app/src/Features/Helpers/EmailHelper.mjs',
+      () => ({ default: ctx.EmailHelper })
+    )
+    vi.doMock('../../../../../app/src/models/User.mjs', () => ({
+      User: ctx.User,
+    }))
 
     vi.doMock(
       '../../../../../app/src/Features/Errors/ErrorController.mjs',

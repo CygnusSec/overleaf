@@ -26,5 +26,25 @@ export default {
       AuthorizationMiddleware.ensureUserIsSiteAdmin,
       UserActivateController.register
     )
+    webRouter.get(
+      '/admin/users',
+      AuthorizationMiddleware.ensureUserIsSiteAdmin,
+      UserActivateController.listUsers
+    )
+    webRouter.put(
+      '/admin/users/:userId',
+      AuthorizationMiddleware.ensureUserIsSiteAdmin,
+      UserActivateController.updateManagedUser
+    )
+    webRouter.post(
+      '/admin/users/:userId/status',
+      AuthorizationMiddleware.ensureUserIsSiteAdmin,
+      UserActivateController.setUserSuspended
+    )
+    webRouter.delete(
+      '/admin/users/:userId',
+      AuthorizationMiddleware.ensureUserIsSiteAdmin,
+      UserActivateController.deleteManagedUser
+    )
   },
 }
