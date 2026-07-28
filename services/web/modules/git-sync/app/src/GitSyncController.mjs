@@ -10,14 +10,33 @@ import UserGetter from '../../../../app/src/Features/User/UserGetter.mjs'
 import { GithubConnection, GitProjectLink } from './GitSyncModels.mjs'
 import { encryptSecret, decryptSecret } from './GitCrypto.mjs'
 import {
+  createBranch,
+  createRepository,
   exchangeCode,
   getRepositories,
   getRepository,
+  getBranches,
   getUser,
 } from './GithubApi.mjs'
 import { pullProject, pushProject } from './GitSyncService.mjs'
 
 const activeProjects = new Set()
+
+function isValidBranchName(branch) {
+  return (
+    typeof branch === 'string' &&
+    branch.length > 0 &&
+    branch.length <= 200 &&
+    !branch.startsWith('/') &&
+    !branch.endsWith('/') &&
+    !branch.endsWith('.') &&
+    !branch.includes('..') &&
+    !branch.includes('@{') &&
+    !branch.includes('//') &&
+    !branch.split('/').some(part => !part || part.endsWith('.lock')) &&
+    !/[\s~^:?*[\]\\]/.test(branch)
+  )
+}
 
 function callbackUrl() {
   return new URL('/oauth/github/callback', Settings.siteUrl).toString()
@@ -149,6 +168,22 @@ async function repositories(req, res) {
   })
 }
 
+async function branches(req, res) {
+  if (!requireConfiguration(res)) return
+  const connection = await getConnection(currentUserId(req))
+  if (!connection) {
+    return res.status(401).json({ message: 'GitHub account is not connected' })
+  }
+  if (typeof req.query.repository !== 'string') {
+    return res.status(400).json({ message: 'Repository is required' })
+  }
+  const result = await getBranches(
+    decryptSecret(connection.token),
+    req.query.repository
+  )
+  res.json({ branches: result.map(branch => branch.name) })
+}
+
 async function disconnect(req, res) {
   const userId = currentUserId(req)
   await Promise.all([
@@ -199,6 +234,17 @@ async function saveLink(req, res) {
     return res.status(403).json({ message: 'Repository write access is required' })
   }
   const branch = req.body.branch || repository.default_branch
+  if (!isValidBranchName(branch)) {
+    return res.status(400).json({ message: 'Invalid Git branch name' })
+  }
+  if (req.body.createBranch === true) {
+    await createBranch(
+      decryptSecret(connection.token),
+      repository.full_name,
+      branch,
+      req.body.sourceBranch || repository.default_branch
+    )
+  }
   const link = await GitProjectLink.findOneAndUpdate(
     { projectId: req.params.projectId },
     {
@@ -217,6 +263,97 @@ async function saveLink(req, res) {
     repositoryFullName: link.repositoryFullName,
     branch: link.branch,
   })
+}
+
+async function createAndLinkRepository(req, res) {
+  if (!requireConfiguration(res)) return
+  if (!(await requireProjectOwner(req, res))) return
+  const projectId = req.params.projectId
+  if (activeProjects.has(projectId)) {
+    return res.status(409).json({ message: 'A GitHub sync is already running' })
+  }
+  const name =
+    typeof req.body.name === 'string' ? req.body.name.trim() : ''
+  if (!/^[A-Za-z0-9_.-]{1,100}$/.test(name)) {
+    return res.status(400).json({
+      message:
+        'Repository name must be 1–100 characters using letters, numbers, dots, hyphens, or underscores.',
+    })
+  }
+  const userId = currentUserId(req)
+  const [connection, user] = await Promise.all([
+    getConnection(userId),
+    UserGetter.promises.getUser(userId, {
+      email: 1,
+      first_name: 1,
+      last_name: 1,
+    }),
+  ])
+  if (!connection) {
+    return res.status(401).json({ message: 'GitHub account is not connected' })
+  }
+
+  activeProjects.add(projectId)
+  try {
+    const token = decryptSecret(connection.token)
+    const requestedBranch = req.body.branch || 'main'
+    if (!isValidBranchName(requestedBranch)) {
+      return res.status(400).json({ message: 'Invalid Git branch name' })
+    }
+    const repository = await createRepository(token, {
+      name,
+      description:
+        typeof req.body.description === 'string'
+          ? req.body.description.trim().slice(0, 350)
+          : '',
+      isPrivate: req.body.private !== false,
+    })
+    if (requestedBranch !== repository.default_branch) {
+      await createBranch(
+        token,
+        repository.full_name,
+        requestedBranch,
+        repository.default_branch
+      )
+    }
+    const link = await GitProjectLink.findOneAndUpdate(
+      { projectId },
+      {
+        $set: {
+          ownerId: userId,
+          repositoryFullName: repository.full_name,
+          cloneUrl: repository.clone_url,
+          branch: requestedBranch,
+          updatedAt: new Date(),
+        },
+        $setOnInsert: { createdAt: new Date() },
+      },
+      { upsert: true, new: true }
+    )
+    const result = await pushProject(link, token, {
+      name: [user.first_name, user.last_name].filter(Boolean).join(' '),
+      email: user.email,
+      message: 'Initial commit from Overleaf',
+    })
+    link.lastSyncedCommit = result.commit
+    link.lastSyncedAt = new Date()
+    link.lastSyncDirection = 'push'
+    await link.save()
+    res.status(201).json({
+      repositoryFullName: link.repositoryFullName,
+      branch: link.branch,
+      commit: result.commit,
+    })
+  } catch (error) {
+    res.status(error.statusCode === 422 ? 409 : 502).json({
+      message:
+        error.statusCode === 422
+          ? 'A repository with this name already exists or the name is invalid.'
+          : error.message || 'Could not create the GitHub repository',
+    })
+  } finally {
+    activeProjects.delete(projectId)
+  }
 }
 
 async function unlink(req, res) {
@@ -327,9 +464,11 @@ export default {
   oauthCallback,
   status,
   repositories,
+  branches,
   disconnect,
   getLink,
   saveLink,
+  createAndLinkRepository,
   unlink,
   pull,
   push,

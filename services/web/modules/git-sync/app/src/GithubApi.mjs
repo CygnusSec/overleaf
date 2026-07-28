@@ -2,6 +2,17 @@ import Settings from '@overleaf/settings'
 
 const API_VERSION = '2022-11-28'
 
+function repositoryPath(fullName) {
+  const parts = fullName.split('/')
+  if (
+    parts.length !== 2 ||
+    parts.some(part => !/^[A-Za-z0-9_.-]+$/.test(part))
+  ) {
+    throw new Error('Invalid GitHub repository name')
+  }
+  return parts.map(encodeURIComponent).join('/')
+}
+
 async function request(path, token, options = {}) {
   const response = await fetch(`https://api.github.com${path}`, {
     ...options,
@@ -60,5 +71,47 @@ export async function getRepositories(token) {
 }
 
 export async function getRepository(token, fullName) {
-  return await request(`/repos/${fullName}`, token)
+  return await request(`/repos/${repositoryPath(fullName)}`, token)
+}
+
+export async function getBranches(token, fullName) {
+  return await request(
+    `/repos/${repositoryPath(fullName)}/branches?per_page=100`,
+    token
+  )
+}
+
+export async function createBranch(token, fullName, branch, sourceBranch) {
+  const encodedSource = sourceBranch
+    .split('/')
+    .map(encodeURIComponent)
+    .join('/')
+  const source = await request(
+    `/repos/${repositoryPath(fullName)}/git/ref/heads/${encodedSource}`,
+    token
+  )
+  return await request(`/repos/${repositoryPath(fullName)}/git/refs`, token, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      ref: `refs/heads/${branch}`,
+      sha: source.object.sha,
+    }),
+  })
+}
+
+export async function createRepository(
+  token,
+  { name, description, isPrivate }
+) {
+  return await request('/user/repos', token, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      name,
+      description,
+      private: isPrivate,
+      auto_init: true,
+    }),
+  })
 }

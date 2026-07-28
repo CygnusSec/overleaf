@@ -23,6 +23,11 @@ function apply(webRouter) {
     login,
     expressify(GitSyncController.repositories)
   )
+  webRouter.get(
+    '/api/github/branches',
+    login,
+    expressify(GitSyncController.branches)
+  )
   webRouter.delete(
     '/api/github/connection',
     login,
@@ -42,6 +47,11 @@ function apply(webRouter) {
     '/project/:projectId/github-sync',
     login,
     expressify(GitSyncController.saveLink)
+  )
+  webRouter.post(
+    '/project/:projectId/github-sync/repository',
+    login,
+    expressify(GitSyncController.createAndLinkRepository)
   )
   webRouter.delete(
     '/project/:projectId/github-sync',

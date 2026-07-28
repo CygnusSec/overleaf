@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
+  deleteJSON,
   FetchError,
   getJSON,
   postJSON,
@@ -30,6 +31,7 @@ export default function GithubImportModal({ onHide }: { onHide: () => void }) {
   const [connection, setConnection] = useState<{
     connected: boolean
     configured: boolean
+    login?: string
   }>()
   const [repositories, setRepositories] = useState<Repository[]>([])
   const [repository, setRepository] = useState('')
@@ -38,7 +40,9 @@ export default function GithubImportModal({ onHide }: { onHide: () => void }) {
   const [error, setError] = useState<string>()
 
   useEffect(() => {
-    getJSON<{ connected: boolean; configured: boolean }>('/api/github/status')
+    getJSON<{ connected: boolean; configured: boolean; login?: string }>(
+      '/api/github/status'
+    )
       .then(async status => {
         setConnection(status)
         if (status.connected) {
@@ -52,6 +56,27 @@ export default function GithubImportModal({ onHide }: { onHide: () => void }) {
   }, [t])
 
   const selected = repositories.find(item => item.fullName === repository)
+
+  const disconnectGithub = async () => {
+    if (!window.confirm(t('unlink_github_warning'))) return
+    setLoading(true)
+    setError(undefined)
+    try {
+      await deleteJSON('/api/github/connection', {})
+      setConnection({ connected: false, configured: true })
+      setRepositories([])
+      setRepository('')
+      setProjectName('')
+    } catch (error) {
+      setError(
+        error instanceof FetchError
+          ? error.getUserFacingMessage()
+          : t('github_sync_error')
+      )
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const importRepository = async () => {
     if (!selected) return
@@ -80,12 +105,21 @@ export default function GithubImportModal({ onHide }: { onHide: () => void }) {
   }
 
   return (
-    <OLModal show animation onHide={onHide} size="lg" backdrop="static">
+    <OLModal
+      show
+      animation
+      onHide={onHide}
+      size="lg"
+      backdrop="static"
+      className="ide-dark-modal github-sync-modal"
+    >
       <OLModalHeader>
         <OLModalTitle>{t('import_from_github')}</OLModalTitle>
       </OLModalHeader>
       <OLModalBody>
-        <p>{t('github_sync_description')}</p>
+        <p className="github-sync-modal-description">
+          {t('github_sync_description')}
+        </p>
         {error ? <OLNotification type="error" content={error} /> : null}
         {connection?.configured === false ? (
           <OLNotification
@@ -93,7 +127,11 @@ export default function GithubImportModal({ onHide }: { onHide: () => void }) {
             content="GitHub Sync has not been configured by the administrator."
           />
         ) : connection?.connected === false ? (
-          <div className="text-center py-4">
+          <div className="github-sync-connect-state">
+            <div className="github-sync-mark" aria-hidden="true">
+              GH
+            </div>
+            <h3>Connect your GitHub account</h3>
             <p>{t('link_to_github_description')}</p>
             <OLButton
               variant="primary"
@@ -108,36 +146,66 @@ export default function GithubImportModal({ onHide }: { onHide: () => void }) {
           </div>
         ) : connection?.connected ? (
           <>
-            <label htmlFor="github-repository" className="form-label">
-              {t('select_github_repository')}
-            </label>
-            <select
-              id="github-repository"
-              className="form-select"
-              value={repository}
-              onChange={event => {
-                setRepository(event.target.value)
-                const name = event.target.value.split('/').pop() || ''
-                setProjectName(name)
-              }}
-            >
-              <option value="">{t('select')}</option>
-              {repositories.map(item => (
-                <option key={item.id} value={item.fullName}>
-                  {item.fullName}
-                  {item.private ? ' (private)' : ''}
-                </option>
-              ))}
-            </select>
-            <label htmlFor="github-project-name" className="form-label mt-3">
-              {t('project_name')}
-            </label>
-            <input
-              id="github-project-name"
-              className="form-control"
-              value={projectName}
-              onChange={event => setProjectName(event.target.value)}
-            />
+            <div className="github-sync-account">
+              <div className="github-sync-account-identity">
+                <span className="github-sync-account-avatar" aria-hidden="true">
+                  {connection.login?.slice(0, 1).toUpperCase()}
+                </span>
+                <span>
+                  <span className="github-sync-account-label">
+                    Connected GitHub account
+                  </span>
+                  <strong>@{connection.login}</strong>
+                </span>
+              </div>
+              <OLButton
+                variant="danger-ghost"
+                disabled={loading}
+                onClick={disconnectGithub}
+              >
+                Disconnect GitHub
+              </OLButton>
+            </div>
+            <div className="github-sync-form">
+              <div>
+                <label htmlFor="github-repository" className="form-label">
+                  GitHub repository
+                </label>
+                <select
+                  id="github-repository"
+                  className="form-select"
+                  value={repository}
+                  onChange={event => {
+                    setRepository(event.target.value)
+                    const name = event.target.value.split('/').pop() || ''
+                    setProjectName(name)
+                  }}
+                >
+                  <option value="">Select a repository</option>
+                  {repositories.map(item => (
+                    <option key={item.id} value={item.fullName}>
+                      {item.fullName}
+                      {item.private ? ' · Private' : ' · Public'}
+                    </option>
+                  ))}
+                </select>
+                <div className="form-text">
+                  Choose the repository you want to open as a new project.
+                </div>
+              </div>
+              <div>
+                <label htmlFor="github-project-name" className="form-label">
+                  {t('project_name')}
+                </label>
+                <input
+                  id="github-project-name"
+                  className="form-control"
+                  value={projectName}
+                  placeholder="Enter a project name"
+                  onChange={event => setProjectName(event.target.value)}
+                />
+              </div>
+            </div>
           </>
         ) : (
           <p>{t('loading')}</p>
