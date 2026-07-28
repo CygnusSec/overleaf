@@ -1,12 +1,19 @@
 import { useLayoutEffect } from 'react'
 import { useActiveOverallTheme } from './use-active-overall-theme'
+import { useUserSettingsContext } from '@/shared/context/user-settings-context'
+import {
+  applyOverallTheme,
+  persistOverallTheme,
+} from '@/shared/utils/overall-theme'
 
 export default function useThemedPage(featureFlag?: string) {
   const activeOverallTheme = useActiveOverallTheme(featureFlag)
+  const {
+    userSettings: { overallTheme },
+  } = useUserSettingsContext()
 
   useLayoutEffect(() => {
-    // Sets the body's data-theme attribute for theming
-    document.body.dataset.theme =
-      activeOverallTheme === 'dark' ? 'default' : 'light'
-  }, [activeOverallTheme])
+    applyOverallTheme(activeOverallTheme)
+    persistOverallTheme(overallTheme)
+  }, [activeOverallTheme, overallTheme])
 }

@@ -4,6 +4,10 @@ import { saveUserSettings } from '../utils/api'
 import { UserSettings } from '../../../../../types/user-settings'
 import { useUserSettingsContext } from '@/shared/context/user-settings-context'
 import getMeta from '@/utils/meta'
+import {
+  applyOverallTheme,
+  persistOverallTheme,
+} from '@/shared/utils/overall-theme'
 
 export default function useSetOverallTheme() {
   const { userSettings, setUserSettings } = useUserSettingsContext()
@@ -25,6 +29,14 @@ export default function useSetOverallTheme() {
         )
 
         if (chosenTheme) {
+          const prefersDark =
+            window.matchMedia?.('(prefers-color-scheme: dark)')?.matches ?? true
+          const isDark =
+            newOverallTheme === '' ||
+            (newOverallTheme === 'system' && prefersDark)
+
+          persistOverallTheme(newOverallTheme)
+          applyOverallTheme(isDark ? 'dark' : 'light')
           setOverallTheme(newOverallTheme)
           saveUserSettings('overallTheme', newOverallTheme)
         }
