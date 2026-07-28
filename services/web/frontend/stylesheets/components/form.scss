@@ -411,6 +411,31 @@
   }
 }
 
+@include theme('default') {
+  .form-select {
+    color: var(--content-primary-dark);
+    background-color: var(--bg-dark-primary);
+    border-color: var(--border-primary-dark);
+
+    &:focus,
+    &:invalid:focus,
+    &.is-invalid:focus,
+    &:focus-visible,
+    &:invalid:focus-visible,
+    &.is-invalid:focus-visible {
+      color: var(--content-primary-dark);
+      background-color: var(--bg-dark-primary);
+      border-color: var(--border-active-dark);
+    }
+
+    option,
+    optgroup {
+      color: var(--content-primary-dark);
+      background-color: var(--bg-dark-primary);
+    }
+  }
+}
+
 .website-redesign {
   label {
     color: $form-text-color;

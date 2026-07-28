@@ -12,13 +12,24 @@
 }
 
 @include theme('default') {
-  .modal {
+  .modal.ide-settings-modal {
     @include dark-dropdown-menu;
     @include form-check-dark;
     @include dark-notification;
     @include dark-input;
     @include dark-buttons;
 
+    // Settings extensions can still use legacy light-theme semantic tokens.
+    // Remap them locally so every settings section remains readable in dark mode.
+    --content-primary: var(--content-primary-dark);
+    --content-secondary: var(--content-secondary-dark);
+    --content-disabled: var(--content-disabled-dark);
+    --content-placeholder: var(--content-placeholder-dark);
+    --bg-light-primary: var(--bg-dark-primary);
+    --bg-light-secondary: var(--bg-dark-secondary);
+    --bg-light-tertiary: var(--bg-dark-tertiary);
+    --border-primary: var(--border-primary-dark);
+    --border-divider: var(--border-divider-dark);
     --bs-modal-color: var(--content-primary-dark);
     --bs-modal-bg: var(--bg-dark-primary);
     --bs-modal-border-color: var(--border-primary-dark);
