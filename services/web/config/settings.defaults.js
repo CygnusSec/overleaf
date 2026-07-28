@@ -1128,6 +1128,7 @@ module.exports = {
   moduleImportSequence: [
     'history-v1',
     'git-sync',
+    'track-changes',
     'launchpad',
     'server-ce-scripts',
     'user-activate',
