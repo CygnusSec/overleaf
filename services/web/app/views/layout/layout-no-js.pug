@@ -14,8 +14,19 @@ html(lang='en' data-theme='light')
 					const isDark =
 						preference === 'dark' ||
 						(preference === 'system' && prefersDark)
-					document.documentElement.dataset.theme = isDark ? 'default' : 'light'
+					const theme = isDark ? 'default' : 'light'
+					document.documentElement.dataset.theme = theme
 					document.documentElement.style.colorScheme = isDark ? 'dark' : 'light'
+					const applyBodyTheme = () => {
+						document.body.dataset.theme = theme
+					}
+					if (document.body) {
+						applyBodyTheme()
+					} else {
+						document.addEventListener('DOMContentLoaded', applyBodyTheme, {
+							once: true,
+						})
+					}
 				} catch {
 					document.documentElement.dataset.theme = 'light'
 					document.documentElement.style.colorScheme = 'light'

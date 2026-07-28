@@ -10,6 +10,8 @@ html.fixed-size-document {
 }
 
 body {
+  --bs-heading-color: var(--content-primary-themed);
+
   position: relative;
   min-height: 100%;
   color: var(--content-primary-themed);

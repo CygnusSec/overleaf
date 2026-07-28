@@ -31,7 +31,11 @@ html(
 					const isDark =
 						preference === 'dark' ||
 						(preference === 'system' && prefersDark)
-					document.documentElement.dataset.theme = isDark ? 'default' : 'light'
+					const theme = isDark ? 'default' : 'light'
+					document.documentElement.dataset.theme = theme
+					if (document.body) {
+						document.body.dataset.theme = theme
+					}
 					document.documentElement.style.colorScheme = isDark ? 'dark' : 'light'
 				}
 
@@ -140,7 +144,12 @@ html(
 			'application-page': isApplicationPage,
 			'red-nav-bar-for-admins': !settings.isDevEnv && hasFeature('saas') && hasAdminAccess(),
 		}
+		data-theme='light'
 	)
+		script(nonce=scriptNonce).
+			document.body.dataset.theme =
+				document.documentElement.dataset.theme || 'light'
+
 		if settings.recaptcha && settings.recaptcha.siteKeyV3
 			script(
 				type='text/javascript'

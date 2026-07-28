@@ -3,12 +3,32 @@
 }
 
 .modal {
-  // Until we add a dark modal version, all core components in modals should use light theme
+  // Default component tokens; dark mode overrides them below.
   @include light-dropdown-menu;
   @include form-check-light;
   @include light-notification;
   @include light-input;
   @include light-buttons;
+}
+
+@include theme('default') {
+  .modal {
+    @include dark-dropdown-menu;
+    @include form-check-dark;
+    @include dark-notification;
+    @include dark-input;
+    @include dark-buttons;
+
+    --bs-modal-color: var(--content-primary-dark);
+    --bs-modal-bg: var(--bg-dark-primary);
+    --bs-modal-border-color: var(--border-primary-dark);
+    --bs-modal-header-border-color: var(--border-divider-dark);
+    --bs-modal-footer-border-color: var(--border-divider-dark);
+
+    .btn-close {
+      filter: invert(1) grayscale(100%) brightness(200%);
+    }
+  }
 }
 
 @include media-breakpoint-up(sm) {

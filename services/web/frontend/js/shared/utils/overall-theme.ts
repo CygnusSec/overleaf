@@ -16,6 +16,8 @@ export function persistOverallTheme(overallTheme: OverallTheme) {
 
 export function applyOverallTheme(activeOverallTheme: ActiveOverallTheme) {
   const isDark = activeOverallTheme === 'dark'
-  document.documentElement.dataset.theme = isDark ? 'default' : 'light'
+  const theme = isDark ? 'default' : 'light'
+  document.documentElement.dataset.theme = theme
+  document.body.dataset.theme = theme
   document.documentElement.style.colorScheme = isDark ? 'dark' : 'light'
 }
