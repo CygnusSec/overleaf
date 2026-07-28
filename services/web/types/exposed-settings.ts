@@ -53,4 +53,5 @@ export type ExposedSettings = {
   templatesEnabled?: boolean
   linkedInInsightsPartnerId?: string
   enablePandocConversions: boolean
+  enableGitSync: boolean
 }

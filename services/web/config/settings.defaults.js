@@ -1055,8 +1055,18 @@ module.exports = {
     labsExperiments: [],
     integrationLinkingWidgets: [],
     referenceLinkingWidgets: [],
-    importProjectFromGithubModalWrapper: [],
-    importProjectFromGithubMenu: [],
+    importProjectFromGithubModalWrapper: [
+      Path.resolve(
+        __dirname,
+        '../modules/git-sync/frontend/js/github-import-modal.tsx'
+      ),
+    ],
+    importProjectFromGithubMenu: [
+      Path.resolve(
+        __dirname,
+        '../modules/git-sync/frontend/js/github-import-menu.tsx'
+      ),
+    ],
     editorLeftMenuSync: [],
     editorLeftMenuManageTemplate: [],
     menubarExtraComponents: [],
@@ -1098,7 +1108,12 @@ module.exports = {
         '../modules/full-project-search/frontend/js/components/full-project-search.tsx'
       ),
     ],
-    integrationPanelComponents: [],
+    integrationPanelComponents: [
+      Path.resolve(
+        __dirname,
+        '../modules/git-sync/frontend/js/git-sync-panel.tsx'
+      ),
+    ],
     referenceSearchSetting: [],
     settingsModalEditorTabSections: [],
     settingsModalSpellcheckSections: [],
@@ -1112,6 +1127,7 @@ module.exports = {
 
   moduleImportSequence: [
     'history-v1',
+    'git-sync',
     'launchpad',
     'server-ce-scripts',
     'user-activate',
@@ -1143,6 +1159,10 @@ module.exports = {
   },
 
   enablePandocConversions: process.env.ENABLE_PANDOC_CONVERSIONS === 'true',
+  enableGitSync: process.env.GIT_INTEGRATION_ENABLED === 'true',
+  gitIntegrationEncryptionKey: process.env.GIT_INTEGRATION_ENCRYPTION_KEY,
+  githubSyncClientId: process.env.GITHUB_SYNC_CLIENT_ID,
+  githubSyncClientSecret: process.env.GITHUB_SYNC_CLIENT_SECRET,
 }
 
 module.exports.mergeWith = function (overrides) {

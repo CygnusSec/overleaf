@@ -8,6 +8,11 @@ FROM $OVERLEAF_BASE_TAG
 
 WORKDIR /overleaf
 
+# GitHub Sync uses the Git CLI to import, pull and push repositories.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
 # Add required source files for yarn install
 # -------------------------------------------
 COPY --parents libraries/*/package.json .yarn/patches/ services/*/package.json tools/migrations/ package.json yarn.lock .yarnrc.yml /overleaf/
