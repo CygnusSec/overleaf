@@ -12,7 +12,6 @@ import {
   DropdownToggle,
 } from '@/shared/components/dropdown/dropdown-menu'
 import createNewProjectImage from '../../images/create-a-new-project.svg'
-import { useFeatureFlag } from '@/shared/context/split-test-context'
 import MaterialIcon from '@/shared/components/material-icon'
 
 const CustomDropdownToggle = forwardRef<
@@ -62,10 +61,8 @@ function WelcomeMessageCreateNewProjectDropdown({
   const { t } = useTranslation()
   const portalTemplates = getMeta('ol-portalTemplates') || []
   const docxImportEnabled =
-    useFeatureFlag('import-docx') &&
     getMeta('ol-ExposedSettings').enablePandocConversions
   const markdownImportEnabled =
-    useFeatureFlag('import-markdown') &&
     getMeta('ol-ExposedSettings').enablePandocConversions
 
   const { isOverleaf, enableGitSync } = getMeta('ol-ExposedSettings')

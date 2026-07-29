@@ -10,7 +10,7 @@ WORKDIR /overleaf
 
 # GitHub Sync uses the Git CLI to import, pull and push repositories.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends git ca-certificates \
+    && apt-get install -y --no-install-recommends git ca-certificates pandoc \
     && rm -rf /var/lib/apt/lists/*
 
 # Add required source files for yarn install
