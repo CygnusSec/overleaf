@@ -28,6 +28,13 @@ async function getThreads(req, res) {
   res.json(threads)
 }
 
+async function getProjectRanges(req, res) {
+  const ranges = await DocumentUpdaterHandler.promises.getProjectRanges(
+    req.params.project_id
+  )
+  res.json(ranges)
+}
+
 async function sendComment(req, res) {
   const { project_id: projectId, thread_id: threadId } = req.params
   const id = userId(req)
@@ -180,8 +187,32 @@ async function deleteOwnMessage(req, res) {
   res.sendStatus(204)
 }
 
+async function acceptChanges(req, res) {
+  const { project_id: projectId, doc_id: docId } = req.params
+  const changeIds = Array.isArray(req.body.change_ids)
+    ? req.body.change_ids
+    : []
+  if (changeIds.length === 0) {
+    return res.status(400).json({ message: 'change_ids is required' })
+  }
+  await DocumentUpdaterHandler.promises.acceptChanges(
+    projectId,
+    docId,
+    changeIds,
+    userId(req)
+  )
+  await EditorRealTimeController.emitToRoom(
+    projectId,
+    'accept-changes',
+    docId,
+    changeIds
+  )
+  res.sendStatus(204)
+}
+
 export default {
   getThreads: expressify(getThreads),
+  getProjectRanges: expressify(getProjectRanges),
   sendComment: expressify(sendComment),
   resolveThread: expressify(resolveThread),
   reopenThread: expressify(reopenThread),
@@ -189,4 +220,5 @@ export default {
   editMessage: expressify(editMessage),
   deleteMessage: expressify(deleteMessage),
   deleteOwnMessage: expressify(deleteOwnMessage),
+  acceptChanges: expressify(acceptChanges),
 }
