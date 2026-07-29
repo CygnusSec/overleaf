@@ -128,7 +128,7 @@ async function convertDocumentLocally(inputPath, conversionType) {
         `--from=${from}`,
         '--to=latex',
         '--standalone',
-        '--pdf-engine=lualatex',
+        '--pdf-engine=xelatex',
         '--variable=mainfont:DejaVu Serif',
         '--variable=sansfont:DejaVu Sans',
         '--variable=monofont:DejaVu Sans Mono',

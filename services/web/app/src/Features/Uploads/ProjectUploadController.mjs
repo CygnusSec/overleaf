@@ -209,7 +209,7 @@ async function importDocument(req, res, next) {
           name,
           archivePath
         )
-      await ProjectOptionsHandler.promises.setCompiler(project._id, 'lualatex')
+      await ProjectOptionsHandler.promises.setCompiler(project._id, 'xelatex')
       AnalyticsManager.recordEventForSession(req.session, 'convert-format', {
         sourceFormat: conversionType,
         targetFormat: 'latex',
