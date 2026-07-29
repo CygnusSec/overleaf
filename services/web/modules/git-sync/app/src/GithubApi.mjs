@@ -81,6 +81,35 @@ export async function getBranches(token, fullName) {
   )
 }
 
+export async function getRepositoryDirectories(
+  token,
+  fullName,
+  branchName
+) {
+  const encodedBranch = branchName.split('/').map(encodeURIComponent).join('/')
+  const branch = await request(
+    `/repos/${repositoryPath(fullName)}/branches/${encodedBranch}`,
+    token
+  )
+  const treeSha = branch.commit?.commit?.tree?.sha
+  if (!treeSha) {
+    throw new Error('Could not resolve the GitHub branch tree')
+  }
+  const tree = await request(
+    `/repos/${repositoryPath(fullName)}/git/trees/${encodeURIComponent(
+      treeSha
+    )}?recursive=1`,
+    token
+  )
+  if (tree.truncated) {
+    throw new Error('Repository tree is too large to list all folders')
+  }
+  return tree.tree
+    .filter(item => item.type === 'tree' && typeof item.path === 'string')
+    .map(item => item.path)
+    .sort((a, b) => a.localeCompare(b))
+}
+
 export async function createBranch(token, fullName, branch, sourceBranch) {
   const encodedSource = sourceBranch
     .split('/')

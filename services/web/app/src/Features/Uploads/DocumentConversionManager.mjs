@@ -15,6 +15,12 @@ import { pipeline } from 'node:stream/promises'
 import OError from '@overleaf/o-error'
 import FormData from 'form-data'
 import { FileTooLargeError, DocumentConversionError } from '../Errors/Errors.js'
+import archiver from 'archiver'
+import os from 'node:os'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
+
+const execFileAsync = promisify(execFile)
 
 function extractClsiUserFacingError(error) {
   try {
@@ -29,6 +35,10 @@ function extractClsiUserFacingError(error) {
 }
 
 async function convertDocumentToLaTeXZipArchive(path, userId, conversionType) {
+  if (Settings.useLocalPandocConversions) {
+    return await convertDocumentLocally(path, conversionType)
+  }
+
   const clsiUrl = new URL(Settings.apis.clsi.url)
   const limits = await CompileManager.promises._getUserCompileLimits(userId)
 
@@ -98,6 +108,85 @@ async function convertDocumentToLaTeXZipArchive(path, userId, conversionType) {
   }
 
   return outputPath
+}
+
+async function convertDocumentLocally(inputPath, conversionType) {
+  const workingDirectory = await fsPromises.mkdtemp(
+    Path.join(os.tmpdir(), 'overleaf-document-import-')
+  )
+  const outputPath = Path.join(
+    Settings.path.dumpFolder,
+    `${crypto.randomUUID()}_document-conversion.zip`
+  )
+  try {
+    const outputTex = Path.join(workingDirectory, 'main.tex')
+    const from = conversionType === 'docx' ? 'docx' : 'markdown'
+    await execFileAsync(
+      'pandoc',
+      [
+        inputPath,
+        `--from=${from}`,
+        '--to=latex',
+        '--standalone',
+        '--pdf-engine=xelatex',
+        '--variable=mainfont:DejaVu Serif',
+        '--variable=sansfont:DejaVu Sans',
+        '--variable=monofont:DejaVu Sans Mono',
+        '--extract-media=.',
+        '--wrap=preserve',
+        `--output=${outputTex}`,
+      ],
+      {
+        cwd: workingDirectory,
+        timeout: 2 * 60 * 1000,
+        maxBuffer: 10 * 1024 * 1024,
+      }
+    )
+    await makePandocOutputPortable(outputTex)
+    await createZipArchive(workingDirectory, outputPath)
+    return outputPath
+  } catch (error) {
+    await fsPromises.unlink(outputPath).catch(() => {})
+    const details =
+      error.code === 'ENOENT'
+        ? 'Pandoc is not installed in the ShareLaTeX image'
+        : error.stderr?.trim() || error.message
+    throw new DocumentConversionError(details).withCause(error)
+  } finally {
+    await fsPromises.rm(workingDirectory, {
+      recursive: true,
+      force: true,
+    })
+  }
+}
+
+async function makePandocOutputPortable(outputTex) {
+  const source = await fsPromises.readFile(outputTex, 'utf8')
+
+  // Pandoc can add lmodern even when it also configures explicit OpenType
+  // fonts. In LuaLaTeX this makes luaotfload resolve lmroman before the
+  // document's main font and causes otherwise valid imports to fail on
+  // installations with an incomplete Latin Modern font cache. The Docker
+  // image always includes DejaVu, so the explicit fonts above are portable.
+  const portableSource = source.replace(
+    /^\\usepackage(?:\[[^\]]*\])?\{lmodern\}\s*(?:%[^\n]*)?$/gm,
+    '% Latin Modern disabled; the imported project uses bundled DejaVu fonts.'
+  )
+
+  await fsPromises.writeFile(outputTex, portableSource, 'utf8')
+}
+
+async function createZipArchive(sourceDirectory, outputPath) {
+  await new Promise((resolve, reject) => {
+    const output = fs.createWriteStream(outputPath)
+    const archive = archiver('zip', { zlib: { level: 9 } })
+    output.on('close', resolve)
+    output.on('error', reject)
+    archive.on('error', reject)
+    archive.pipe(output)
+    archive.directory(sourceDirectory, false)
+    archive.finalize()
+  })
 }
 
 /**

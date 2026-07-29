@@ -184,6 +184,11 @@
   line-height: 1.5;
 }
 
+.github-sync-path-selector {
+  display: grid;
+  gap: var(--spacing-03);
+}
+
 .github-sync-panel-account {
   display: flex;
   min-width: 0;
@@ -288,6 +293,16 @@
     gap: var(--spacing-03);
   }
 
+  .github-sync-path-label {
+    max-width: 100%;
+    overflow: hidden;
+    color: var(--content-secondary-themed);
+    font-family: monospace;
+    font-size: 0.75rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .github-sync-branch-change {
     padding: 0;
     border: 0;
@@ -314,6 +329,25 @@
     display: flex;
     justify-content: flex-end;
     gap: var(--spacing-03);
+  }
+
+  .github-sync-path-editor {
+    display: grid;
+    gap: var(--spacing-03);
+    padding: var(--spacing-04);
+    margin-bottom: var(--spacing-05);
+    border: 1px solid var(--border-divider-themed);
+    border-radius: 8px;
+    background: var(--bg-secondary-themed);
+
+    .form-label,
+    .form-text {
+      margin: 0;
+    }
+
+    .btn {
+      justify-self: start;
+    }
   }
 
   .github-sync-actions {

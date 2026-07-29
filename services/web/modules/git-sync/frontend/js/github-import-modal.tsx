@@ -16,6 +16,7 @@ import {
   OLModalHeader,
   OLModalTitle,
 } from '@/shared/components/ol/ol-modal'
+import SyncPathSelector from './sync-path-selector'
 
 type Repository = {
   id: number
@@ -36,6 +37,7 @@ export default function GithubImportModal({ onHide }: { onHide: () => void }) {
   const [repositories, setRepositories] = useState<Repository[]>([])
   const [repository, setRepository] = useState('')
   const [projectName, setProjectName] = useState('')
+  const [syncPath, setSyncPath] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string>()
 
@@ -67,6 +69,7 @@ export default function GithubImportModal({ onHide }: { onHide: () => void }) {
       setRepositories([])
       setRepository('')
       setProjectName('')
+      setSyncPath('')
     } catch (error) {
       setError(
         error instanceof FetchError
@@ -90,6 +93,7 @@ export default function GithubImportModal({ onHide }: { onHide: () => void }) {
             repositoryFullName: selected.fullName,
             branch: selected.defaultBranch,
             projectName: projectName || selected.fullName.split('/').pop(),
+            syncPath: syncPath.trim(),
           },
         }
       )
@@ -204,6 +208,24 @@ export default function GithubImportModal({ onHide }: { onHide: () => void }) {
                   placeholder="Enter a project name"
                   onChange={event => setProjectName(event.target.value)}
                 />
+              </div>
+              <div>
+                <label htmlFor="github-import-sync-path" className="form-label">
+                  Repository folder
+                </label>
+                <SyncPathSelector
+                  id="github-import-sync-path"
+                  repository={selected?.fullName || ''}
+                  branch={selected?.defaultBranch || ''}
+                  value={syncPath}
+                  onChange={setSyncPath}
+                  disabled={loading}
+                  allowCreate={false}
+                />
+                <div className="form-text">
+                  Select a folder to import only its contents, or use the
+                  repository root.
+                </div>
               </div>
             </div>
           </>

@@ -20,8 +20,6 @@ import {
 import type { DropdownProps } from '@/shared/components/types/dropdown-menu-props'
 import { useSendProjectListMB } from '@/features/project-list/components/project-list-events'
 import type { PortalTemplate } from '../../../../../types/portal-template'
-import { useFeatureFlag } from '@/shared/context/split-test-context'
-import MaterialIcon from '@/shared/components/material-icon'
 import { useProjectListContext } from '@/features/project-list/context/project-list-context'
 import { isSplitTestEnabled } from '@/utils/splitTestUtils'
 
@@ -65,10 +63,8 @@ function NewProjectButton({
   const { show: enableAddAffiliationWidget } = useAddAffiliation()
   const sendProjectListMB = useSendProjectListMB()
   const docxImportEnabled =
-    useFeatureFlag('import-docx') &&
     getMeta('ol-ExposedSettings').enablePandocConversions
   const markdownImportEnabled =
-    useFeatureFlag('import-markdown') &&
     getMeta('ol-ExposedSettings').enablePandocConversions
   const { selectedTagId, tags } = useProjectListContext()
   const isLibraryEnabled = isSplitTestEnabled('overleaf-library')
@@ -237,7 +233,6 @@ function NewProjectButton({
                     dropdownMenuEvent: 'import-docx',
                   })
                 }
-                trailingIcon={<MaterialIcon type="fiber_new" />}
               >
                 {t('import_word_document')}
               </DropdownItem>
@@ -252,7 +247,6 @@ function NewProjectButton({
                     dropdownMenuEvent: 'import-markdown',
                   })
                 }
-                trailingIcon={<MaterialIcon type="fiber_new" />}
               >
                 {t('import_markdown_file')}
               </DropdownItem>

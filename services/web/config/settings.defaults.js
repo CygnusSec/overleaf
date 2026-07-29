@@ -1160,6 +1160,8 @@ module.exports = {
   },
 
   enablePandocConversions: process.env.ENABLE_PANDOC_CONVERSIONS === 'true',
+  useLocalPandocConversions:
+    process.env.LOCAL_PANDOC_CONVERSIONS === 'true',
   enableGitSync: process.env.GIT_INTEGRATION_ENABLED === 'true',
   gitIntegrationEncryptionKey: process.env.GIT_INTEGRATION_ENCRYPTION_KEY,
   githubSyncClientId: process.env.GITHUB_SYNC_CLIENT_ID,

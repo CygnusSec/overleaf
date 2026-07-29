@@ -16,6 +16,13 @@ function apply(webRouter) {
     canRead,
     TrackChangesController.getThreads
   )
+  webRouter.get(
+    '/project/:project_id/ranges',
+    login,
+    notRestricted,
+    canRead,
+    TrackChangesController.getProjectRanges
+  )
   webRouter.post(
     '/project/:project_id/thread/:thread_id/messages',
     login,
@@ -68,6 +75,14 @@ function apply(webRouter) {
     notRestricted,
     canRead,
     TrackChangesController.deleteOwnMessage
+  )
+  webRouter.post(
+    '/project/:project_id/doc/:doc_id/changes/accept',
+    login,
+    notRestricted,
+    canRead,
+    AuthorizationMiddleware.ensureUserCanWriteOrReviewProjectContent,
+    TrackChangesController.acceptChanges
   )
 }
 

@@ -12,8 +12,6 @@ import {
   DropdownToggle,
 } from '@/shared/components/dropdown/dropdown-menu'
 import createNewProjectImage from '../../images/create-a-new-project.svg'
-import { useFeatureFlag } from '@/shared/context/split-test-context'
-import MaterialIcon from '@/shared/components/material-icon'
 
 const CustomDropdownToggle = forwardRef<
   HTMLButtonElement,
@@ -62,10 +60,8 @@ function WelcomeMessageCreateNewProjectDropdown({
   const { t } = useTranslation()
   const portalTemplates = getMeta('ol-portalTemplates') || []
   const docxImportEnabled =
-    useFeatureFlag('import-docx') &&
     getMeta('ol-ExposedSettings').enablePandocConversions
   const markdownImportEnabled =
-    useFeatureFlag('import-markdown') &&
     getMeta('ol-ExposedSettings').enablePandocConversions
 
   const { isOverleaf, enableGitSync } = getMeta('ol-ExposedSettings')
@@ -150,7 +146,6 @@ function WelcomeMessageCreateNewProjectDropdown({
                 handleDropdownItemClick(e, 'import_docx', 'import-docx')
               }
               tabIndex={-1}
-              trailingIcon={<MaterialIcon type="fiber_new" />}
             >
               {t('import_word_document')}
             </DropdownItem>
@@ -164,7 +159,6 @@ function WelcomeMessageCreateNewProjectDropdown({
                 handleDropdownItemClick(e, 'import_markdown', 'import-markdown')
               }
               tabIndex={-1}
-              trailingIcon={<MaterialIcon type="fiber_new" />}
             >
               {t('import_markdown_file')}
             </DropdownItem>
