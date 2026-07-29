@@ -12,8 +12,11 @@
 }
 
 @include theme('default') {
-  .modal.ide-settings-modal,
-  .modal.ide-dark-modal {
+  // Modals are rendered in a portal, so page-level dark surfaces do not
+  // automatically style their Bootstrap content. Apply the dark component
+  // tokens to every modal to keep titles, labels, controls and actions
+  // readable across the project list, account pages and editor.
+  .modal {
     @include dark-dropdown-menu;
     @include form-check-dark;
     @include dark-notification;
@@ -37,6 +40,21 @@
     --bs-modal-border-color: var(--border-primary-dark);
     --bs-modal-header-border-color: var(--border-divider-dark);
     --bs-modal-footer-border-color: var(--border-divider-dark);
+
+    .modal-content {
+      color: var(--content-primary-dark);
+      background-color: var(--bg-dark-primary);
+    }
+
+    .modal-header,
+    .modal-footer {
+      background-color: var(--bg-dark-primary);
+    }
+
+    .modal-title,
+    .form-label {
+      color: var(--content-primary-dark);
+    }
 
     .btn-close {
       filter: invert(1) grayscale(100%) brightness(200%);
