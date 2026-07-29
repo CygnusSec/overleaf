@@ -128,6 +128,10 @@ async function convertDocumentLocally(inputPath, conversionType) {
         `--from=${from}`,
         '--to=latex',
         '--standalone',
+        '--pdf-engine=lualatex',
+        '--variable=mainfont:DejaVu Serif',
+        '--variable=sansfont:DejaVu Sans',
+        '--variable=monofont:DejaVu Sans Mono',
         '--extract-media=.',
         '--wrap=preserve',
         `--output=${outputTex}`,
@@ -138,6 +142,7 @@ async function convertDocumentLocally(inputPath, conversionType) {
         maxBuffer: 10 * 1024 * 1024,
       }
     )
+    await makePandocOutputPortable(outputTex)
     await createZipArchive(workingDirectory, outputPath)
     return outputPath
   } catch (error) {
@@ -153,6 +158,22 @@ async function convertDocumentLocally(inputPath, conversionType) {
       force: true,
     })
   }
+}
+
+async function makePandocOutputPortable(outputTex) {
+  const source = await fsPromises.readFile(outputTex, 'utf8')
+
+  // Pandoc can add lmodern even when it also configures explicit OpenType
+  // fonts. In LuaLaTeX this makes luaotfload resolve lmroman before the
+  // document's main font and causes otherwise valid imports to fail on
+  // installations with an incomplete Latin Modern font cache. The Docker
+  // image always includes DejaVu, so the explicit fonts above are portable.
+  const portableSource = source.replace(
+    /^\\usepackage(?:\[[^\]]*\])?\{lmodern\}\s*(?:%[^\n]*)?$/gm,
+    '% Latin Modern disabled; the imported project uses bundled DejaVu fonts.'
+  )
+
+  await fsPromises.writeFile(outputTex, portableSource, 'utf8')
 }
 
 async function createZipArchive(sourceDirectory, outputPath) {

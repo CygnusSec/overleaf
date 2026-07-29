@@ -12,7 +12,6 @@ import {
   DropdownToggle,
 } from '@/shared/components/dropdown/dropdown-menu'
 import createNewProjectImage from '../../images/create-a-new-project.svg'
-import MaterialIcon from '@/shared/components/material-icon'
 
 const CustomDropdownToggle = forwardRef<
   HTMLButtonElement,
@@ -147,7 +146,6 @@ function WelcomeMessageCreateNewProjectDropdown({
                 handleDropdownItemClick(e, 'import_docx', 'import-docx')
               }
               tabIndex={-1}
-              trailingIcon={<MaterialIcon type="fiber_new" />}
             >
               {t('import_word_document')}
             </DropdownItem>
@@ -161,7 +159,6 @@ function WelcomeMessageCreateNewProjectDropdown({
                 handleDropdownItemClick(e, 'import_markdown', 'import-markdown')
               }
               tabIndex={-1}
-              trailingIcon={<MaterialIcon type="fiber_new" />}
             >
               {t('import_markdown_file')}
             </DropdownItem>
