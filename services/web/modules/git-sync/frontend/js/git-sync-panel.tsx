@@ -12,6 +12,7 @@ import { useLocation } from '@/shared/hooks/use-location'
 import getMeta from '@/utils/meta'
 import OLButton from '@/shared/components/ol/ol-button'
 import OLNotification from '@/shared/components/ol/ol-notification'
+import SyncPathSelector from './sync-path-selector'
 
 type Repository = {
   id: number
@@ -27,6 +28,7 @@ type LinkStatus = {
   link?: {
     repositoryFullName: string
     branch: string
+    syncPath: string
     lastSyncedAt?: string
     lastSyncDirection?: 'pull' | 'push'
     lastSyncedCommit?: string
@@ -45,9 +47,13 @@ export default function GitSyncPanel() {
   const [selectedBranch, setSelectedBranch] = useState('')
   const [createNewBranch, setCreateNewBranch] = useState(false)
   const [newBranchName, setNewBranchName] = useState('')
+  const [existingRepositorySyncPath, setExistingRepositorySyncPath] =
+    useState('docs/latex')
   const [newRepositoryName, setNewRepositoryName] = useState('')
   const [newRepositoryPrivate, setNewRepositoryPrivate] = useState(true)
   const [newRepositoryBranch, setNewRepositoryBranch] = useState('main')
+  const [newRepositorySyncPath, setNewRepositorySyncPath] = useState('')
+  const [linkedSyncPath, setLinkedSyncPath] = useState('')
   const [editingLinkedBranch, setEditingLinkedBranch] = useState(false)
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
@@ -63,6 +69,9 @@ export default function GitSyncPanel() {
         `/project/${projectId}/github-sync`
       )
       setStatus(next)
+      if (next.link) {
+        setLinkedSyncPath(next.link.syncPath || '')
+      }
       if (next.connected && !next.link) {
         const result = await getJSON<{ repositories: Repository[] }>(
           '/api/github/repositories'
@@ -108,6 +117,7 @@ export default function GitSyncPanel() {
           branch,
           createBranch: createNewBranch,
           sourceBranch: repository.defaultBranch,
+          syncPath: existingRepositorySyncPath.trim(),
         },
       })
       await load()
@@ -146,9 +156,20 @@ export default function GitSyncPanel() {
 
   const sync = async (direction: 'pull' | 'push') => {
     if (
+      direction === 'push' &&
+      !status?.link?.syncPath &&
+      !window.confirm(
+        'The repository folder is empty, so this push will replace files across the repository root. Continue?'
+      )
+    ) {
+      return
+    }
+    if (
       direction === 'pull' &&
       !window.confirm(
-        'Pulling replaces the current Overleaf project files with the selected GitHub branch. Continue?'
+        `Pulling replaces the current Overleaf project files with files from ${
+          status?.link?.syncPath || 'the repository root'
+        }. Continue?`
       )
     ) {
       return
@@ -194,6 +215,7 @@ export default function GitSyncPanel() {
             name,
             private: newRepositoryPrivate,
             branch: newRepositoryBranch.trim() || 'main',
+            syncPath: newRepositorySyncPath.trim(),
             description: `Source files for ${name}`,
           },
         }
@@ -253,6 +275,7 @@ export default function GitSyncPanel() {
           branch,
           createBranch: createNewBranch,
           sourceBranch: status.link.branch,
+          syncPath: status.link.syncPath,
         },
       })
       setEditingLinkedBranch(false)
@@ -260,6 +283,36 @@ export default function GitSyncPanel() {
         createNewBranch
           ? `Branch ${branch} was created and selected.`
           : `Switched to branch ${branch}.`
+      )
+      await load()
+    } catch (error) {
+      setError(
+        error instanceof FetchError
+          ? error.getUserFacingMessage()
+          : t('github_sync_error')
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const updateLinkedSyncPath = async () => {
+    if (!status?.link) return
+    setBusy(true)
+    setError(undefined)
+    setNotice(undefined)
+    try {
+      await putJSON(`/project/${projectId}/github-sync`, {
+        body: {
+          repositoryFullName: status.link.repositoryFullName,
+          branch: status.link.branch,
+          syncPath: linkedSyncPath.trim(),
+        },
+      })
+      setNotice(
+        linkedSyncPath.trim()
+          ? `GitHub Sync is now limited to ${linkedSyncPath.trim()}.`
+          : 'GitHub Sync now uses the repository root.'
       )
       await load()
     } catch (error) {
@@ -392,6 +445,25 @@ export default function GitSyncPanel() {
                     onChange={event => setNewBranchName(event.target.value)}
                   />
                 ) : null}
+                <label className="form-label" htmlFor="github-sync-path">
+                  Repository folder
+                </label>
+                <SyncPathSelector
+                  id="github-sync-path"
+                  repository={selectedRepository}
+                  branch={
+                    createNewBranch
+                      ? selectedRepositoryDetails?.defaultBranch || ''
+                      : selectedBranch
+                  }
+                  value={existingRepositorySyncPath}
+                  onChange={setExistingRepositorySyncPath}
+                  disabled={busy}
+                />
+                <div className="form-text mb-3">
+                  Select an existing folder or create one on the first push.
+                  Source code outside it stays unchanged.
+                </div>
               </>
             ) : null}
             <OLButton
@@ -451,6 +523,21 @@ export default function GitSyncPanel() {
               maxLength={200}
               onChange={event => setNewRepositoryBranch(event.target.value)}
             />
+            <label className="form-label" htmlFor="github-new-repository-path">
+              Repository folder
+            </label>
+            <input
+              id="github-new-repository-path"
+              className="form-control mb-1"
+              value={newRepositorySyncPath}
+              placeholder="Leave empty to use the repository root"
+              maxLength={500}
+              onChange={event => setNewRepositorySyncPath(event.target.value)}
+            />
+            <div className="form-text mb-3">
+              Enter a new folder path, or leave it empty for a dedicated
+              repository.
+            </div>
             <OLButton
               variant="primary"
               disabled={
@@ -488,6 +575,9 @@ export default function GitSyncPanel() {
                 >
                   Change
                 </button>
+              </span>
+              <span className="github-sync-path-label">
+                Folder: {status.link.syncPath || 'Repository root'}
               </span>
             </span>
           </div>
@@ -545,6 +635,33 @@ export default function GitSyncPanel() {
               </div>
             </div>
           ) : null}
+          <div className="github-sync-path-editor">
+            <label className="form-label" htmlFor="github-linked-sync-path">
+              Repository folder
+            </label>
+            <SyncPathSelector
+              id="github-linked-sync-path"
+              repository={status.link.repositoryFullName}
+              branch={status.link.branch}
+              value={linkedSyncPath}
+              onChange={setLinkedSyncPath}
+              disabled={busy}
+            />
+            <div className="form-text">
+              Select an existing folder or create one on the next push. Push
+              and pull only affect this folder.
+            </div>
+            <OLButton
+              variant="secondary"
+              size="sm"
+              disabled={
+                busy || linkedSyncPath.trim() === (status.link.syncPath || '')
+              }
+              onClick={updateLinkedSyncPath}
+            >
+              Update folder
+            </OLButton>
+          </div>
           <label className="form-label" htmlFor="github-commit-message">
             Commit message
           </label>

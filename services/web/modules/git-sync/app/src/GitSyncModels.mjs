@@ -35,6 +35,7 @@ const GitProjectLinkSchema = new Schema(
     repositoryFullName: { type: String, required: true },
     cloneUrl: { type: String, required: true },
     branch: { type: String, required: true },
+    syncPath: { type: String, default: '' },
     lastSyncedCommit: { type: String },
     lastSyncedAt: { type: Date },
     lastSyncDirection: { type: String, enum: ['pull', 'push'] },

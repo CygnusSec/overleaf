@@ -28,6 +28,11 @@ function apply(webRouter) {
     login,
     expressify(GitSyncController.branches)
   )
+  webRouter.get(
+    '/api/github/directories',
+    login,
+    expressify(GitSyncController.directories)
+  )
   webRouter.delete(
     '/api/github/connection',
     login,

@@ -16,9 +16,14 @@ import {
   getRepositories,
   getRepository,
   getBranches,
+  getRepositoryDirectories,
   getUser,
 } from './GithubApi.mjs'
-import { pullProject, pushProject } from './GitSyncService.mjs'
+import {
+  normalizeSyncPath,
+  pullProject,
+  pushProject,
+} from './GitSyncService.mjs'
 
 const activeProjects = new Set()
 
@@ -36,6 +41,10 @@ function isValidBranchName(branch) {
     !branch.split('/').some(part => !part || part.endsWith('.lock')) &&
     !/[\s~^:?*[\]\\]/.test(branch)
   )
+}
+
+function requestedSyncPath(value, fallback = '') {
+  return normalizeSyncPath(value === undefined ? fallback : value)
 }
 
 function callbackUrl() {
@@ -184,6 +193,31 @@ async function branches(req, res) {
   res.json({ branches: result.map(branch => branch.name) })
 }
 
+async function directories(req, res) {
+  if (!requireConfiguration(res)) return
+  const connection = await getConnection(currentUserId(req))
+  if (!connection) {
+    return res.status(401).json({ message: 'GitHub account is not connected' })
+  }
+  if (
+    typeof req.query.repository !== 'string' ||
+    typeof req.query.branch !== 'string'
+  ) {
+    return res
+      .status(400)
+      .json({ message: 'Repository and branch are required' })
+  }
+  if (!isValidBranchName(req.query.branch)) {
+    return res.status(400).json({ message: 'Invalid Git branch name' })
+  }
+  const result = await getRepositoryDirectories(
+    decryptSecret(connection.token),
+    req.query.repository,
+    req.query.branch
+  )
+  res.json({ directories: result })
+}
+
 async function disconnect(req, res) {
   const userId = currentUserId(req)
   await Promise.all([
@@ -210,6 +244,7 @@ async function getLink(req, res) {
       ? {
           repositoryFullName: link.repositoryFullName,
           branch: link.branch,
+          syncPath: link.syncPath || '',
           lastSyncedAt: link.lastSyncedAt,
           lastSyncDirection: link.lastSyncDirection,
           lastSyncedCommit: link.lastSyncedCommit,
@@ -237,6 +272,15 @@ async function saveLink(req, res) {
   if (!isValidBranchName(branch)) {
     return res.status(400).json({ message: 'Invalid Git branch name' })
   }
+  const existingLink = await GitProjectLink.findOne({
+    projectId: req.params.projectId,
+  })
+  let syncPath
+  try {
+    syncPath = requestedSyncPath(req.body.syncPath, existingLink?.syncPath || '')
+  } catch (error) {
+    return res.status(400).json({ message: error.message })
+  }
   if (req.body.createBranch === true) {
     await createBranch(
       decryptSecret(connection.token),
@@ -253,6 +297,7 @@ async function saveLink(req, res) {
         repositoryFullName: repository.full_name,
         cloneUrl: repository.clone_url,
         branch,
+        syncPath,
         updatedAt: new Date(),
       },
       $setOnInsert: { createdAt: new Date() },
@@ -262,6 +307,7 @@ async function saveLink(req, res) {
   res.json({
     repositoryFullName: link.repositoryFullName,
     branch: link.branch,
+    syncPath: link.syncPath,
   })
 }
 
@@ -300,6 +346,12 @@ async function createAndLinkRepository(req, res) {
     if (!isValidBranchName(requestedBranch)) {
       return res.status(400).json({ message: 'Invalid Git branch name' })
     }
+    let syncPath
+    try {
+      syncPath = requestedSyncPath(req.body.syncPath)
+    } catch (error) {
+      return res.status(400).json({ message: error.message })
+    }
     const repository = await createRepository(token, {
       name,
       description:
@@ -324,6 +376,7 @@ async function createAndLinkRepository(req, res) {
           repositoryFullName: repository.full_name,
           cloneUrl: repository.clone_url,
           branch: requestedBranch,
+          syncPath,
           updatedAt: new Date(),
         },
         $setOnInsert: { createdAt: new Date() },
@@ -342,6 +395,7 @@ async function createAndLinkRepository(req, res) {
     res.status(201).json({
       repositoryFullName: link.repositoryFullName,
       branch: link.branch,
+      syncPath: link.syncPath,
       commit: result.commit,
     })
   } catch (error) {
@@ -430,6 +484,12 @@ async function importRepository(req, res) {
   }
   const token = decryptSecret(connection.token)
   const repository = await getRepository(token, req.body.repositoryFullName)
+  let syncPath
+  try {
+    syncPath = requestedSyncPath(req.body.syncPath)
+  } catch (error) {
+    return res.status(400).json({ message: error.message })
+  }
   const project = await ProjectCreationHandler.promises.createBlankProject(
     userId,
     req.body.projectName || repository.name
@@ -440,6 +500,7 @@ async function importRepository(req, res) {
     repositoryFullName: repository.full_name,
     cloneUrl: repository.clone_url,
     branch: req.body.branch || repository.default_branch,
+    syncPath,
   })
   try {
     const commit = await pullProject(link, token, userId)
@@ -465,6 +526,7 @@ export default {
   status,
   repositories,
   branches,
+  directories,
   disconnect,
   getLink,
   saveLink,
