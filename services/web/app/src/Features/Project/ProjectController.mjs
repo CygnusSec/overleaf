@@ -1008,6 +1008,7 @@ const _ProjectController = {
         gitBridgePublicBaseUrl: Settings.gitBridgePublicBaseUrl,
         gitBridgeEnabled: Features.hasFeature('git-bridge'),
         gitSyncEnabled: Settings.enableGitSync,
+        aiAssistantEnabled: Settings.enableAiAssistant,
         wsUrl,
         showSupport: Features.hasFeature('support'),
         showTemplatesServerPro,
