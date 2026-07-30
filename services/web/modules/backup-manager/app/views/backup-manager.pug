@@ -130,6 +130,6 @@ block content
 					pre
 						code docker compose stop sharelatex redis backup-manager cloudflared
 							| &#10;docker compose up -d mongo
-							| &#10;docker compose build backup-manager
+							| &#10;docker compose pull backup-manager
 							| &#10;docker compose --profile restore run --rm --no-deps backup-restore restore /backups/ARCHIVE.tar.gz.gpg --confirm-data-loss
 							| &#10;docker compose up -d

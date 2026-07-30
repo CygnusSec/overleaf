@@ -63,7 +63,8 @@ ensure_prerequisites() {
 initialize_new_server() {
   prepare_directories
   echo "Initializing a new Overleaf server..."
-  docker compose up -d --build
+  docker compose pull
+  docker compose up -d
   printf '%s\n' "mode=new" "initialized_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     >.overleaf-initialized
   echo "New server initialized."
@@ -100,7 +101,7 @@ initialize_from_backup() {
 
   docker compose stop sharelatex redis backup-manager cloudflared || true
   docker compose up -d mongo
-  docker compose build backup-manager
+  docker compose pull backup-manager
   docker compose --profile restore run --rm --no-deps backup-restore \
     restore "/backups/$(basename "$target_archive")" \
     --confirm-data-loss

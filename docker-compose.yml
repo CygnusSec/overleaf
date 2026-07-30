@@ -90,9 +90,6 @@ services:
       - overleaf-net
 
   backup-manager:
-    build:
-      context: .
-      dockerfile: server-ce/backup-manager/Dockerfile
     image: ${BACKUP_MANAGER_IMAGE}
     container_name: ${BACKUP_MANAGER_CONTAINER_NAME}
     restart: ${BACKUP_MANAGER_RESTART_POLICY}

@@ -81,7 +81,7 @@ The manual restore sequence used by the wizard is:
 ```sh
 docker compose stop sharelatex redis backup-manager cloudflared
 docker compose up -d mongo
-docker compose build backup-manager
+docker compose pull backup-manager
 docker compose --profile restore run --rm --no-deps backup-restore \
   restore /backups/overleaf-backup-YYYYMMDDTHHMMSSZ.tar.gz.gpg \
   --confirm-data-loss
