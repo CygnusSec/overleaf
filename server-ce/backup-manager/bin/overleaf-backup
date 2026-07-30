@@ -1,0 +1,196 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+BACKUP_ROOT="${BACKUP_ROOT:-/backups}"
+MONGO_URL="${OVERLEAF_MONGO_URL:-mongodb://mongo:27017/sharelatex?replicaSet=overleaf}"
+REDIS_SERVER="${REDIS_HOST:-redis}"
+SHARELATEX_SOURCE="${SHARELATEX_SOURCE:-/source/sharelatex}"
+REDIS_DATA_TARGET="${REDIS_DATA_TARGET:-/restore/redis}"
+SHARELATEX_DATA_TARGET="${SHARELATEX_DATA_TARGET:-/restore/sharelatex}"
+DEPLOYMENT_ROOT="${DEPLOYMENT_ROOT:-/deployment}"
+WEB_UID="${BACKUP_WEB_UID:-33}"
+WEB_GID="${BACKUP_WEB_GID:-33}"
+REDIS_UID="${BACKUP_REDIS_UID:-999}"
+REDIS_GID="${BACKUP_REDIS_GID:-999}"
+MIN_FREE_GB="${BACKUP_MIN_FREE_GB:-10}"
+QUIESCE_SECONDS="${BACKUP_QUIESCE_SECONDS:-20}"
+ENCRYPTION_PASSPHRASE="${BACKUP_ENCRYPTION_PASSPHRASE:-}"
+
+mkdir -p "$BACKUP_ROOT" "$BACKUP_ROOT/.requests"
+chown "$WEB_UID:$WEB_GID" "$BACKUP_ROOT" "$BACKUP_ROOT/.requests"
+chmod 2770 "$BACKUP_ROOT" "$BACKUP_ROOT/.requests"
+
+create_backup() {
+  local stamp work archive plain_archive passphrase_file free_kb required_kb
+  if [[ -z "$ENCRYPTION_PASSPHRASE" || "$ENCRYPTION_PASSPHRASE" == replace-with-* ]]; then
+    echo "BACKUP_ENCRYPTION_PASSPHRASE is required" >&2
+    return 1
+  fi
+  exec 9>"$BACKUP_ROOT/.backup.lock"
+  if ! flock -n 9; then
+    echo "Another backup is already running" >&2
+    return 1
+  fi
+
+  stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+  work="$(mktemp -d "$BACKUP_ROOT/.tmp-${stamp}-XXXXXX")"
+  archive="$BACKUP_ROOT/overleaf-backup-${stamp}.tar.gz.gpg"
+  plain_archive="$work/overleaf-backup-${stamp}.tar.gz"
+  passphrase_file="$work/.passphrase"
+  trap 'rm -f "$BACKUP_ROOT/.maintenance"; rm -rf "$work"' EXIT INT TERM
+
+  free_kb="$(df -Pk "$BACKUP_ROOT" | awk 'NR == 2 {print $4}')"
+  required_kb="$((MIN_FREE_GB * 1024 * 1024))"
+  if ((free_kb < required_kb)); then
+    echo "Backup storage has less than ${MIN_FREE_GB} GB free" >&2
+    return 1
+  fi
+
+  touch "$BACKUP_ROOT/.maintenance"
+  chmod 660 "$BACKUP_ROOT/.maintenance"
+  chown "$WEB_UID:$WEB_GID" "$BACKUP_ROOT/.maintenance"
+  sleep "$QUIESCE_SECONDS"
+
+  mongodump \
+    --uri="$MONGO_URL" \
+    --archive="$work/mongodb.archive.gz" \
+    --gzip
+  redis-cli -h "$REDIS_SERVER" --rdb "$work/redis.rdb"
+  tar \
+    --exclude='./backups' \
+    --exclude='./backups/**' \
+    -czf "$work/sharelatex-data.tar.gz" \
+    -C "$SHARELATEX_SOURCE" .
+
+  tar \
+    --exclude='./.git' \
+    --exclude='./.cache' \
+    --exclude='**/node_modules' \
+    --exclude='**/.yarn/cache' \
+    --exclude='**/coverage' \
+    -czf "$work/deployment-source.tar.gz" \
+    -C "$DEPLOYMENT_ROOT" .
+
+  jq -n \
+    --arg formatVersion "1" \
+    --arg createdAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    --arg appImage "${SHARELATEX_IMAGE:-unknown}" \
+    --arg mongoImage "${MONGO_IMAGE:-unknown}" \
+    --arg redisImage "${REDIS_IMAGE:-unknown}" \
+    '{
+      formatVersion: ($formatVersion | tonumber),
+      createdAt: $createdAt,
+      encrypted: true,
+      encryption: "OpenPGP AES256",
+      applicationImage: $appImage,
+      mongoImage: $mongoImage,
+      redisImage: $redisImage,
+      contents: ["mongodb", "redis", "sharelatex-data", "deployment-source"]
+    }' >"$work/manifest.json"
+
+  (
+    cd "$work"
+    sha256sum \
+      mongodb.archive.gz \
+      redis.rdb \
+      sharelatex-data.tar.gz \
+      deployment-source.tar.gz >checksums.sha256
+    tar -czf "$plain_archive" \
+      manifest.json checksums.sha256 mongodb.archive.gz redis.rdb \
+      sharelatex-data.tar.gz deployment-source.tar.gz
+  )
+
+  printf '%s' "$ENCRYPTION_PASSPHRASE" >"$passphrase_file"
+  chmod 600 "$passphrase_file"
+  gpg \
+    --batch \
+    --yes \
+    --pinentry-mode loopback \
+    --passphrase-file "$passphrase_file" \
+    --symmetric \
+    --cipher-algo AES256 \
+    --output "$archive" \
+    "$plain_archive"
+  chmod 640 "$archive"
+  chown "root:$WEB_GID" "$archive"
+  sha256sum "$archive" >"$archive.sha256"
+  chmod 640 "$archive.sha256"
+  chown "root:$WEB_GID" "$archive.sha256"
+  printf '%s\n' "$archive"
+}
+
+restore_backup() {
+  local archive="${1:-}" confirmation="${2:-}" work plain_archive passphrase_file
+  if [[ -z "$archive" || "$confirmation" != "--confirm-data-loss" ]]; then
+    echo "Usage: overleaf-backup restore /backups/<archive>.tar.gz.gpg --confirm-data-loss" >&2
+    exit 2
+  fi
+  if [[ -z "$ENCRYPTION_PASSPHRASE" || "$ENCRYPTION_PASSPHRASE" == replace-with-* ]]; then
+    echo "BACKUP_ENCRYPTION_PASSPHRASE is required" >&2
+    exit 2
+  fi
+
+  archive="$(realpath "$archive")"
+  if [[ "$archive" != "$(realpath "$BACKUP_ROOT")/"* || ! -f "$archive" ]]; then
+    echo "Backup must be an existing archive inside $BACKUP_ROOT" >&2
+    exit 2
+  fi
+  if [[ -f "$archive.sha256" ]]; then
+    (cd "$(dirname "$archive")" && sha256sum -c "$(basename "$archive").sha256")
+  fi
+
+  work="$(mktemp -d "$BACKUP_ROOT/.restore-XXXXXX")"
+  trap 'rm -rf "$work"' EXIT INT TERM
+  plain_archive="$work/backup.tar.gz"
+  passphrase_file="$work/.passphrase"
+  printf '%s' "$ENCRYPTION_PASSPHRASE" >"$passphrase_file"
+  chmod 600 "$passphrase_file"
+  gpg \
+    --batch \
+    --yes \
+    --pinentry-mode loopback \
+    --passphrase-file "$passphrase_file" \
+    --decrypt \
+    --output "$plain_archive" \
+    "$archive"
+  tar -xzf "$plain_archive" -C "$work"
+  (cd "$work" && sha256sum -c checksums.sha256)
+  jq -e '.formatVersion == 1 and .encrypted == true' \
+    "$work/manifest.json" >/dev/null
+
+  mongorestore \
+    --uri="$MONGO_URL" \
+    --archive="$work/mongodb.archive.gz" \
+    --gzip \
+    --drop
+
+  mkdir -p "$REDIS_DATA_TARGET" "$SHARELATEX_DATA_TARGET"
+  find "$REDIS_DATA_TARGET" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+  install \
+    -o "$REDIS_UID" \
+    -g "$REDIS_GID" \
+    -m 640 \
+    "$work/redis.rdb" \
+    "$REDIS_DATA_TARGET/dump.rdb"
+
+  find "$SHARELATEX_DATA_TARGET" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+  tar -xzf "$work/sharelatex-data.tar.gz" -C "$SHARELATEX_DATA_TARGET"
+  tar -xzf "$work/deployment-source.tar.gz" -C "$DEPLOYMENT_ROOT"
+  echo "Restore completed. Start all Overleaf services now."
+}
+
+case "${1:-scheduler}" in
+  create)
+    create_backup
+    ;;
+  restore)
+    restore_backup "${2:-}" "${3:-}"
+    ;;
+  scheduler)
+    exec /usr/local/bin/backup-scheduler
+    ;;
+  *)
+    echo "Supported commands: create, scheduler, restore" >&2
+    exit 2
+    ;;
+esac

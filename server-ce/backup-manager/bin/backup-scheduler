@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+BACKUP_ROOT="${BACKUP_ROOT:-/backups}"
+CONFIG="$BACKUP_ROOT/schedule.json"
+STATE="$BACKUP_ROOT/.scheduler-state"
+REQUESTS="$BACKUP_ROOT/.requests"
+STATUS="$BACKUP_ROOT/last-run.json"
+WEB_GID="${BACKUP_WEB_GID:-33}"
+mkdir -p "$REQUESTS"
+
+due_now() {
+  local frequency hour minute weekday now_hour now_minute now_weekday today marker
+  [[ -f "$CONFIG" ]] || return 1
+  [[ "$(jq -r '.enabled // false' "$CONFIG")" == "true" ]] || return 1
+  frequency="$(jq -r '.frequency // "daily"' "$CONFIG")"
+  hour="$(jq -r '.hour // 2' "$CONFIG")"
+  minute="$(jq -r '.minute // 0' "$CONFIG")"
+  weekday="$(jq -r '.weekday // 0' "$CONFIG")"
+  now_hour="$(date +%-H)"
+  now_minute="$(date +%-M)"
+  now_weekday="$(date +%w)"
+  today="$(date +%F)"
+  marker="$today-$hour-$minute"
+  [[ "$now_hour" == "$hour" && "$now_minute" == "$minute" ]] || return 1
+  [[ "$frequency" != "weekly" || "$now_weekday" == "$weekday" ]] || return 1
+  [[ ! -f "$STATE" || "$(cat "$STATE")" != "$marker" ]] || return 1
+  printf '%s' "$marker" >"$STATE"
+}
+
+prune_backups() {
+  local keep
+  keep="$(jq -r '.retention // 7' "$CONFIG" 2>/dev/null || echo 7)"
+  mapfile -t archives < <(
+    find "$BACKUP_ROOT" -maxdepth 1 -type f -name 'overleaf-backup-*.tar.gz.gpg' \
+      -printf '%T@ %p\n' | sort -rn | awk '{print $2}'
+  )
+  for ((i = keep; i < ${#archives[@]}; i++)); do
+    rm -f -- "${archives[$i]}" "${archives[$i]}.sha256"
+  done
+}
+
+run_backup() {
+  local output status
+  if output="$(/usr/local/bin/overleaf-backup create 2>&1)"; then
+    status="success"
+  else
+    status="failed"
+  fi
+  jq -n \
+    --arg status "$status" \
+    --arg finishedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    --arg message "$output" \
+    '{status: $status, finishedAt: $finishedAt, message: $message}' \
+    >"$STATUS"
+  chown "root:$WEB_GID" "$STATUS"
+  chmod 640 "$STATUS"
+  [[ "$status" == "success" ]]
+}
+
+while true; do
+  if compgen -G "$REQUESTS/create-*" >/dev/null; then
+    rm -f -- "$REQUESTS"/create-*
+    run_backup || true
+    prune_backups
+  elif due_now; then
+    run_backup || true
+    prune_backups
+  fi
+  sleep 30
+done

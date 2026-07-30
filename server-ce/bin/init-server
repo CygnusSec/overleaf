@@ -1,0 +1,142 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+DEPLOYMENT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$DEPLOYMENT_ROOT"
+
+read_env() {
+  local key="$1" value
+  value="$(
+    awk -v key="$key" '
+      index($0, key "=") == 1 {
+        value = substr($0, length(key) + 2)
+        sub(/\r$/, "", value)
+        print value
+        exit
+      }
+    ' .env
+  )"
+  value="${value%\"}"
+  value="${value#\"}"
+  value="${value%\'}"
+  value="${value#\'}"
+  printf '%s' "$value"
+}
+
+require_safe_absolute_path() {
+  local label="$1" target="$2"
+  if [[ -z "$target" || "$target" != /* || "$target" == "/" ]]; then
+    echo "$label must be an explicit absolute path other than /: $target" >&2
+    exit 2
+  fi
+}
+
+prepare_directories() {
+  local sharelatex mongo redis backups
+  sharelatex="$(read_env SHARELATEX_DATA_PATH)"
+  mongo="$(read_env MONGO_DATA_PATH)"
+  redis="$(read_env REDIS_DATA_PATH)"
+  backups="$(read_env BACKUP_DATA_PATH)"
+  require_safe_absolute_path "SHARELATEX_DATA_PATH" "$sharelatex"
+  require_safe_absolute_path "MONGO_DATA_PATH" "$mongo"
+  require_safe_absolute_path "REDIS_DATA_PATH" "$redis"
+  require_safe_absolute_path "BACKUP_DATA_PATH" "$backups"
+  mkdir -p "$sharelatex" "$mongo" "$redis" "$backups"
+}
+
+ensure_prerequisites() {
+  command -v docker >/dev/null || {
+    echo "Docker is required." >&2
+    exit 1
+  }
+  docker compose version >/dev/null
+  if [[ ! -f .env ]]; then
+    cp .env.example .env
+    chmod 600 .env
+    echo "Created .env from .env.example."
+    echo "Configure domains, email, secrets, image tags and storage paths, then run this command again."
+    exit 2
+  fi
+  docker compose config --quiet
+}
+
+initialize_new_server() {
+  prepare_directories
+  echo "Initializing a new Overleaf server..."
+  docker compose up -d --build
+  printf '%s\n' "mode=new" "initialized_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    >.overleaf-initialized
+  echo "New server initialized."
+}
+
+initialize_from_backup() {
+  local source_archive="${1:-}" backup_root target_archive source_checksum
+  if [[ -z "$source_archive" ]]; then
+    read -r -p "Path to backup archive (.tar.gz): " source_archive
+  fi
+  source_archive="$(realpath "$source_archive")"
+  if [[ ! -f "$source_archive" || "$source_archive" != *.tar.gz.gpg ]]; then
+    echo "Select an existing encrypted .tar.gz.gpg backup archive." >&2
+    exit 2
+  fi
+
+  prepare_directories
+  backup_root="$(read_env BACKUP_DATA_PATH)"
+  target_archive="$backup_root/$(basename "$source_archive")"
+  if [[ "$source_archive" != "$target_archive" ]]; then
+    install -m 600 "$source_archive" "$target_archive"
+  fi
+  source_checksum="${source_archive}.sha256"
+  if [[ -f "$source_checksum" ]]; then
+    install -m 600 "$source_checksum" "${target_archive}.sha256"
+  fi
+
+  echo "Restore will replace MongoDB, Redis, ShareLaTeX data and deployment configuration."
+  read -r -p "Type RESTORE to continue: " confirmation
+  if [[ "$confirmation" != "RESTORE" ]]; then
+    echo "Restore cancelled."
+    exit 2
+  fi
+
+  docker compose stop sharelatex redis backup-manager cloudflared || true
+  docker compose up -d mongo
+  docker compose build backup-manager
+  docker compose --profile restore run --rm --no-deps backup-restore \
+    restore "/backups/$(basename "$target_archive")" \
+    --confirm-data-loss
+  docker compose up -d
+  printf '%s\n' "mode=restore" "initialized_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    >.overleaf-initialized
+  echo "Server restored and started."
+}
+
+ensure_prerequisites
+
+mode="${1:-}"
+if [[ -z "$mode" ]]; then
+  echo "Initialize Overleaf server"
+  echo "  1) Create a new server"
+  echo "  2) Import an existing backup"
+  read -r -p "Choose [1-2]: " choice
+  case "$choice" in
+    1) mode="new" ;;
+    2) mode="restore" ;;
+    *)
+      echo "Invalid choice." >&2
+      exit 2
+      ;;
+  esac
+fi
+
+case "$mode" in
+  new)
+    initialize_new_server
+    ;;
+  restore)
+    initialize_from_backup "${2:-}"
+    ;;
+  *)
+    echo "Usage: $0 [new | restore /path/to/backup.tar.gz.gpg]" >&2
+    exit 2
+    ;;
+esac
