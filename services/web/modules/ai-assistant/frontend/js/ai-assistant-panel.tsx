@@ -79,16 +79,11 @@ export default function AiAssistantPanel() {
     setProposal(undefined)
     setMessages([])
     try {
-      const [result, conversation] = await Promise.all([
-        getJSON<{
-          personal: Connection[]
-          shared: Connection[]
-          codex?: CodexStatus
-        }>('/api/ai/connections'),
-        getJSON<{ messages: ChatMessage[] }>(
-          `/project/${projectId}/ai/conversation`
-        ),
-      ])
+      const result = await getJSON<{
+        personal: Connection[]
+        shared: Connection[]
+        codex?: CodexStatus
+      }>('/api/ai/connections')
       if (requestId !== loadRequestRef.current) return
       const codex = result.codex?.connected
         ? [
@@ -106,7 +101,18 @@ export default function AiAssistantPanel() {
           ? current
           : items[0]?.id || ''
       )
-      setMessages(conversation.messages)
+      try {
+        const conversation = await getJSON<{ messages: ChatMessage[] }>(
+          `/project/${projectId}/ai/conversation`
+        )
+        if (requestId !== loadRequestRef.current) return
+        setMessages(conversation.messages)
+      } catch {
+        // A missing/unavailable history endpoint must not hide valid AI
+        // connections, including an already authenticated Codex account.
+        if (requestId !== loadRequestRef.current) return
+        setMessages([])
+      }
     } catch (err) {
       if (requestId !== loadRequestRef.current) return
       setConnections([])
