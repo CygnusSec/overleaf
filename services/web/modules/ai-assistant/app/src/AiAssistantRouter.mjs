@@ -57,6 +57,15 @@ export default {
       AuthorizationMiddleware.ensureUserCanReadProject,
       expressify(AiAssistantController.run)
     )
+    webRouter.post(
+      '/project/:project_id/ai/apply',
+      login,
+      RateLimiterMiddleware.rateLimit(aiRequestRateLimiter, {
+        params: ['project_id'],
+      }),
+      AuthorizationMiddleware.ensureUserCanWriteProjectContent,
+      expressify(AiAssistantController.applyProjectChanges)
+    )
     webRouter.get(
       '/admin/ai-providers',
       AuthorizationMiddleware.ensureUserIsSiteAdmin,

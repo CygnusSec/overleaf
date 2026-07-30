@@ -20,7 +20,7 @@ Set the following environment variables:
 ```env
 AI_INTEGRATION_ENABLED=true
 AI_CREDENTIAL_ENCRYPTION_KEY=<base64-encoded-32-byte-key>
-AI_PROVIDERS_CONFIG=[{"id":"openai","name":"OpenAI","enabled":true,"adapter":"openai","baseUrl":"https://api.openai.com/v1","defaultModel":"gpt-5.4","models":["gpt-5.4"]}]
+AI_PROVIDERS_CONFIG=[{"id":"openai","name":"OpenAI","enabled":true,"adapter":"openai","baseUrl":"https://api.openai.com/v1","defaultModel":"gpt-5.6-sol","models":["gpt-5.6-sol","gpt-5.6-terra","gpt-5.6-luna","gpt-5.5","gpt-5.4","gpt-5.4-mini"]}]
 ```
 
 `AI_PROVIDERS_CONFIG` is only a catalog. It must never contain user API keys.
@@ -38,6 +38,8 @@ Users manage personal connections under **Account settings → AI connections**.
 Administrators manage shared endpoints under **Admin → AI Providers**.
 
 The editor has a dedicated **AI Assistant** rail tab for read-only questions and
-reviewed edits. Edit responses are not applied until the user explicitly
-accepts them. If the document changes while a response is being generated, the
-stale proposal is rejected instead of overwriting newer collaborative edits.
+reviewed project edits. An edit proposal can replace the current LaTeX document
+and create new top-level files or folders. Nothing is applied until the user
+explicitly accepts the complete plan. Existing project files are never silently
+overwritten, and a stale current-document proposal is rejected when the
+document changes while the AI request is running.

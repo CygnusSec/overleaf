@@ -26,6 +26,13 @@ type Connection = {
   enabled: boolean
 }
 
+function providerModels(provider?: Provider) {
+  if (!provider) return []
+  return Array.from(
+    new Set([provider.defaultModel, ...provider.models].filter(Boolean))
+  )
+}
+
 export default function AiConnectionsSettings() {
   const enabled = getMeta('ol-aiAssistantEnabled')
   const [providers, setProviders] = useState<Provider[]>([])
@@ -52,7 +59,7 @@ export default function AiConnectionsSettings() {
         const first = catalog.providers[0]
         setProviderId(first.id)
         setDisplayName(first.name)
-        setModel(first.defaultModel || first.models[0] || '')
+        setModel(providerModels(first)[0] || '')
       }
     } catch (err) {
       setError(
@@ -84,7 +91,7 @@ export default function AiConnectionsSettings() {
     setProviderId(id)
     const provider = providers.find(item => item.id === id)
     setDisplayName(provider?.name || '')
-    setModel(provider?.defaultModel || provider?.models[0] || '')
+    setModel(providerModels(provider)[0] || '')
   }
 
   const submit = async (event: FormEvent) => {
@@ -224,21 +231,23 @@ export default function AiConnectionsSettings() {
               <label className="form-label" htmlFor="ai-model">
                 Model
               </label>
-              <OLFormControl
+              <OLFormSelect
                 id="ai-model"
                 value={model}
                 onChange={event => {
                   setModel(event.target.value)
                   setTestSuccess(false)
                 }}
-                list="ai-models"
                 required
-              />
-              <datalist id="ai-models">
-                {providers
-                  .find(item => item.id === providerId)
-                  ?.models.map(item => <option value={item} key={item} />)}
-              </datalist>
+              >
+                {providerModels(
+                  providers.find(item => item.id === providerId)
+                ).map(item => (
+                  <option value={item} key={item}>
+                    {item}
+                  </option>
+                ))}
+              </OLFormSelect>
             </div>
             <div className="col-md-6 form-group">
               <label className="form-label" htmlFor="ai-api-key">

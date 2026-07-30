@@ -8,6 +8,14 @@ const VALID_ADAPTERS = new Set([
   'ollama',
 ])
 
+export class AiProviderError extends Error {
+  constructor(message, statusCode) {
+    super(message)
+    this.name = 'AiProviderError'
+    this.statusCode = statusCode
+  }
+}
+
 function safeBaseUrl(value) {
   const url = new URL(value)
   if (url.protocol !== 'https:' && url.protocol !== 'http:') {
@@ -63,10 +71,21 @@ async function fetchJson(url, options) {
     }
     if (!response.ok) {
       const message =
-        data?.error?.message || data?.message || `AI returned HTTP ${response.status}`
-      throw new Error(String(message).slice(0, 1000))
+        data?.error?.message ||
+        data?.message ||
+        `AI provider returned HTTP ${response.status}`
+      throw new AiProviderError(String(message).slice(0, 1000), response.status)
     }
     return data
+  } catch (error) {
+    if (error instanceof AiProviderError) throw error
+    if (error?.name === 'AbortError') {
+      throw new AiProviderError('AI provider request timed out', 504)
+    }
+    throw new AiProviderError(
+      'Could not connect to the AI provider. Check its endpoint and network access.',
+      502
+    )
   } finally {
     clearTimeout(timeout)
   }
@@ -78,8 +97,11 @@ function systemPrompt(mode) {
   if (mode === 'ask') return `${base} Answer the user clearly.`
   return `${base}
 Return JSON only, with this exact shape:
-{"explanation":"short explanation","replacement":"complete replacement text"}
-The replacement must contain the complete revised input text, without Markdown fences.`
+{"explanation":"short explanation","replacement":"complete replacement text or null when unchanged","files":[{"name":"new-file.tex","content":"complete file content"}],"folders":["new-folder"]}
+The replacement must contain the complete revised current file, without Markdown
+fences. Use files to propose new project files and folders to propose new
+top-level folders. File and folder names must be clean base names without path
+separators. Do not delete or overwrite existing project files.`
 }
 
 function userPrompt({ prompt, content, selection, mode }) {
@@ -170,7 +192,9 @@ export async function runProvider({
       ? contentValue.map(item => item?.text || '').join('')
       : contentValue || ''
   }
-  if (!text) throw new Error('AI provider returned an empty response')
+  if (!text) {
+    throw new AiProviderError('AI provider returned an empty response', 502)
+  }
   if (mode === 'ask') return { answer: text }
   let normalized = text
     .trim()
@@ -185,12 +209,38 @@ export async function runProvider({
   }
   try {
     const parsed = JSON.parse(normalized)
-    if (typeof parsed.replacement !== 'string') throw new Error()
+    if (
+      parsed.replacement !== null &&
+      typeof parsed.replacement !== 'string'
+    ) {
+      throw new Error()
+    }
     return {
       explanation: String(parsed.explanation || ''),
-      replacement: parsed.replacement,
+      replacement:
+        typeof parsed.replacement === 'string' ? parsed.replacement : null,
+      files: Array.isArray(parsed.files)
+        ? parsed.files
+            .filter(
+              item =>
+                item &&
+                typeof item.name === 'string' &&
+                typeof item.content === 'string'
+            )
+            .slice(0, 20)
+            .map(item => ({
+              name: item.name,
+              content: item.content,
+            }))
+        : [],
+      folders: Array.isArray(parsed.folders)
+        ? parsed.folders.filter(item => typeof item === 'string').slice(0, 20)
+        : [],
     }
   } catch {
-    throw new Error('AI provider returned an invalid edit response')
+    throw new AiProviderError(
+      'AI provider returned an invalid edit response',
+      502
+    )
   }
 }

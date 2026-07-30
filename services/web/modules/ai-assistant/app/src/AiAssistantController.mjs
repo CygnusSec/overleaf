@@ -1,8 +1,12 @@
 import Settings from '@overleaf/settings'
 import SessionManager from '../../../../app/src/Features/Authentication/SessionManager.mjs'
+import EditorController from '../../../../app/src/Features/Editor/EditorController.mjs'
+import ProjectGetter from '../../../../app/src/Features/Project/ProjectGetter.mjs'
+import SafePath from '../../../../app/src/Features/Project/SafePath.mjs'
 import { AiSystemProvider, AiUserConnection } from './AiModels.mjs'
 import { decryptCredential, encryptCredential } from './AiCrypto.mjs'
 import {
+  AiProviderError,
   getCatalogProvider,
   providerCatalog,
   runProvider,
@@ -33,6 +37,25 @@ function publicConnection(item) {
     enabled: item.enabled,
     lastUsedAt: item.lastUsedAt,
   }
+}
+
+function sendProviderError(res, error) {
+  if (!(error instanceof AiProviderError)) throw error
+
+  const status =
+    error.statusCode === 400 ||
+    error.statusCode === 401 ||
+    error.statusCode === 403 ||
+    error.statusCode === 404 ||
+    error.statusCode === 422
+      ? 422
+      : error.statusCode === 429
+        ? 429
+        : error.statusCode === 504
+          ? 504
+          : 502
+
+  return res.status(status).json({ message: error.message })
 }
 
 export async function catalog(req, res) {
@@ -109,16 +132,20 @@ export async function testConnection(req, res) {
   if (!provider || !apiKey || apiKey.length > 20000 || !model) {
     return res.status(422).json({ message: 'Invalid AI connection' })
   }
-  await runProvider({
-    adapter: provider.adapter,
-    baseUrl: provider.baseUrl,
-    apiKey,
-    model,
-    prompt: 'Reply with the single word OK.',
-    content: '',
-    selection: '',
-    mode: 'ask',
-  })
+  try {
+    await runProvider({
+      adapter: provider.adapter,
+      baseUrl: provider.baseUrl,
+      apiKey,
+      model,
+      prompt: 'Reply with the single word OK.',
+      content: '',
+      selection: '',
+      mode: 'ask',
+    })
+  } catch (error) {
+    return sendProviderError(res, error)
+  }
   res.json({ ok: true })
 }
 
@@ -212,13 +239,18 @@ export async function run(req, res) {
       model: personal.model,
     }
   }
-  const result = await runProvider({
-    ...runtime,
-    prompt,
-    content,
-    selection,
-    mode,
-  })
+  let result
+  try {
+    result = await runProvider({
+      ...runtime,
+      prompt,
+      content,
+      selection,
+      mode,
+    })
+  } catch (error) {
+    return sendProviderError(res, error)
+  }
   if (
     typeof result.replacement === 'string' &&
     result.replacement.length > (Settings.aiMaxDocumentChars || 200000)
@@ -230,6 +262,88 @@ export async function run(req, res) {
     await personal.save()
   }
   res.json(result)
+}
+
+export async function applyProjectChanges(req, res) {
+  if (!requireEnabled(res)) return
+  const projectId = req.params.project_id
+  const files = Array.isArray(req.body.files) ? req.body.files : []
+  const folders = Array.isArray(req.body.folders) ? req.body.folders : []
+  const maxChars = Settings.aiMaxDocumentChars || 200000
+
+  if (
+    files.length > 20 ||
+    folders.length > 20 ||
+    files.some(
+      item =>
+        !item ||
+        typeof item.name !== 'string' ||
+        typeof item.content !== 'string' ||
+        item.name.length > 149 ||
+        item.content.length > maxChars ||
+        !SafePath.isCleanFilename(item.name.trim())
+    ) ||
+    folders.some(
+      name =>
+        typeof name !== 'string' ||
+        !name ||
+        name.length > 149 ||
+        !SafePath.isCleanFilename(name.trim())
+    )
+  ) {
+    return res.status(422).json({ message: 'Invalid AI file operations' })
+  }
+
+  const project = await ProjectGetter.promises.getProject(projectId, {
+    rootFolder: 1,
+  })
+  const rootFolderId = project?.rootFolder?.[0]?._id
+  if (!rootFolderId) return res.sendStatus(404)
+  const root = project.rootFolder[0]
+  const requestedNames = [
+    ...folders.map(name => name.trim()),
+    ...files.map(item => item.name.trim()),
+  ]
+  const existingNames = new Set([
+    ...(root.docs || []).map(item => item.name),
+    ...(root.fileRefs || []).map(item => item.name),
+    ...(root.folders || []).map(item => item.name),
+  ])
+  if (
+    new Set(requestedNames).size !== requestedNames.length ||
+    requestedNames.some(name => existingNames.has(name))
+  ) {
+    return res.status(409).json({
+      message:
+        'One or more proposed files or folders already exist in the project root',
+    })
+  }
+
+  const actorId = userId(req)
+  const created = []
+  for (const name of folders) {
+    const folder = await EditorController.promises.addFolder(
+      projectId,
+      rootFolderId,
+      name.trim(),
+      'ai-assistant',
+      actorId
+    )
+    created.push({ type: 'folder', id: folder._id, name: name.trim() })
+  }
+  for (const item of files) {
+    const name = item.name.trim()
+    const doc = await EditorController.promises.addDoc(
+      projectId,
+      rootFolderId,
+      name,
+      item.content.split('\n'),
+      'ai-assistant',
+      actorId
+    )
+    created.push({ type: 'doc', id: doc._id, name })
+  }
+  res.status(201).json({ created })
 }
 
 export async function adminPage(req, res) {
@@ -305,6 +419,7 @@ export default {
   updateConnection,
   deleteConnection,
   run,
+  applyProjectChanges,
   adminPage,
   saveSystemProvider,
   deleteSystemProvider,

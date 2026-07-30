@@ -29,12 +29,16 @@ export default function AiAssistantPanel() {
   const [answer, setAnswer] = useState('')
   const [proposal, setProposal] = useState<{
     explanation: string
-    replacement: string
+    replacement: string | null
+    files: Array<{ name: string; content: string }>
+    folders: string[]
     sourceContent: string
   }>()
   const [busy, setBusy] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string>()
+  const canWrite =
+    permissionsLevel === 'owner' || permissionsLevel === 'readAndWrite'
 
   const load = useCallback(async () => {
     if (!enabled) {
@@ -116,15 +120,20 @@ export default function AiAssistantPanel() {
       const result = await postJSON<{
         answer?: string
         explanation?: string
-        replacement?: string
+        replacement?: string | null
+        files?: Array<{ name: string; content: string }>
+        folders?: string[]
       }>(`/project/${projectId}/ai/run`, {
         body: { connectionId, mode, prompt, content, selection },
       })
       if (mode === 'ask') setAnswer(result.answer || '')
-      else if (typeof result.replacement === 'string') {
+      else {
         setProposal({
           explanation: result.explanation || '',
-          replacement: result.replacement,
+          replacement:
+            typeof result.replacement === 'string' ? result.replacement : null,
+          files: result.files || [],
+          folders: result.folders || [],
           sourceContent: content,
         })
       }
@@ -139,8 +148,8 @@ export default function AiAssistantPanel() {
     }
   }
 
-  const apply = () => {
-    if (!view || !proposal || permissionsLevel === 'readOnly') return
+  const apply = async () => {
+    if (!view || !proposal || !canWrite) return
     const current = view.state.doc.toString()
     if (current !== proposal.sourceContent) {
       setError(
@@ -151,16 +160,41 @@ export default function AiAssistantPanel() {
     }
     if (
       !window.confirm(
-        'Apply the proposed replacement to the currently open document?'
+        `Apply this AI proposal? It may update the current file and create ${proposal.files.length} file(s) and ${proposal.folders.length} folder(s).`
       )
     ) {
       return
     }
-    view.dispatch({
-      changes: { from: 0, to: current.length, insert: proposal.replacement },
-    })
-    setProposal(undefined)
-    setAnswer('The proposed change was applied to the current document.')
+    setBusy(true)
+    setError(undefined)
+    try {
+      if (proposal.files.length || proposal.folders.length) {
+        await postJSON(`/project/${projectId}/ai/apply`, {
+          body: { files: proposal.files, folders: proposal.folders },
+        })
+      }
+      if (typeof proposal.replacement === 'string') {
+        view.dispatch({
+          changes: {
+            from: 0,
+            to: current.length,
+            insert: proposal.replacement,
+          },
+        })
+      }
+      setProposal(undefined)
+      setAnswer(
+        'The approved LaTeX and project file changes were applied successfully.'
+      )
+    } catch (err) {
+      setError(
+        err instanceof FetchError
+          ? err.getUserFacingMessage()
+          : 'Could not apply the AI file operations.'
+      )
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -207,7 +241,7 @@ export default function AiAssistantPanel() {
               onChange={event => setMode(event.target.value as 'ask' | 'edit')}
             >
               <option value="ask">Ask about this document</option>
-              <option value="edit">Propose a LaTeX edit</option>
+              <option value="edit">Edit LaTeX and project files</option>
             </OLFormSelect>
           </div>
           <div className="form-group">
@@ -246,14 +280,39 @@ export default function AiAssistantPanel() {
           <div className="ai-proposal-card">
             <h4>Proposed change</h4>
             <p>{proposal.explanation}</p>
-            <pre className="ai-proposal-code">{proposal.replacement}</pre>
+            {typeof proposal.replacement === 'string' ? (
+              <>
+                <strong>Update current file</strong>
+                <pre className="ai-proposal-code">{proposal.replacement}</pre>
+              </>
+            ) : null}
+            {proposal.folders.length ? (
+              <div className="ai-file-operation-list">
+                <strong>New folders</strong>
+                <ul>
+                  {proposal.folders.map(name => (
+                    <li key={name}>{name}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {proposal.files.length ? (
+              <div className="ai-file-operation-list">
+                <strong>New files</strong>
+                <ul>
+                  {proposal.files.map(file => (
+                    <li key={file.name}>{file.name}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
             <div className="ai-proposal-actions">
               <OLButton
                 variant="primary"
                 onClick={apply}
-                disabled={permissionsLevel === 'readOnly'}
+                disabled={!canWrite || busy}
               >
-                Apply to current file
+                Apply approved changes
               </OLButton>
               <OLButton
                 variant="secondary"
