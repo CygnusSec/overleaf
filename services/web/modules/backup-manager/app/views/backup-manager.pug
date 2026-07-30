@@ -16,11 +16,22 @@ block content
 						.alert.alert-warning Backup Manager is disabled in configuration.
 					if enabled && !encryptionConfigured
 						.alert.alert-danger Configure BACKUP_ENCRYPTION_PASSPHRASE before creating backups.
+					if enabled && encryptionConfigured && !schedulerAvailable
+						.alert.alert-danger
+							strong Backup service is offline.
+							|  Start or recreate it with
+							code docker compose up -d --force-recreate backup-manager
+							| .
 					if lastRun
-						.alert(class=lastRun.status === 'success' ? 'alert-success' : 'alert-danger')
-							strong Last backup: #{lastRun.status}
-							|  at #{lastRun.finishedAt}.
-							if lastRun.status !== 'success'
+						.alert(class=lastRun.status === 'success' ? 'alert-success' : lastRun.status === 'failed' ? 'alert-danger' : 'alert-info')
+							strong Backup status: #{lastRun.status}
+							if lastRun.finishedAt
+								|  at #{lastRun.finishedAt}.
+							else if lastRun.startedAt
+								|  since #{lastRun.startedAt}.
+							else if lastRun.requestedAt
+								|  requested at #{lastRun.requestedAt}.
+							if lastRun.message
 								pre
 									code= lastRun.message
 
@@ -31,7 +42,10 @@ block content
 							p.small.text-muted Active editors are disconnected and the site enters maintenance mode until the snapshot completes.
 							form(method='post' action='/admin/backups/create')
 								input(name='_csrf' type='hidden' value=csrfToken)
-								button.btn.btn-primary(type='submit' disabled=!enabled || !encryptionConfigured) Create backup now
+								button.btn.btn-primary(
+									type='submit'
+									disabled=!enabled || !encryptionConfigured || !schedulerAvailable || (lastRun && ['queued', 'running'].includes(lastRun.status))
+								)= lastRun && ['queued', 'running'].includes(lastRun.status) ? 'Backup in progress…' : 'Create backup now'
 
 						.col-md-6
 							h2 Import backup archive
@@ -133,3 +147,7 @@ block content
 							| &#10;docker compose pull backup-manager
 							| &#10;docker compose --profile restore run --rm --no-deps backup-restore restore /backups/ARCHIVE.tar.gz.gpg --confirm-data-loss
 							| &#10;docker compose up -d
+
+	if lastRun && ['queued', 'running'].includes(lastRun.status)
+		script.
+			window.setTimeout(() => window.location.reload(), 5000)

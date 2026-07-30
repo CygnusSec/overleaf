@@ -6,8 +6,24 @@ CONFIG="$BACKUP_ROOT/schedule.json"
 STATE="$BACKUP_ROOT/.scheduler-state"
 REQUESTS="$BACKUP_ROOT/.requests"
 STATUS="$BACKUP_ROOT/last-run.json"
+HEARTBEAT="$BACKUP_ROOT/.scheduler-heartbeat"
 WEB_GID="${BACKUP_WEB_GID:-33}"
 mkdir -p "$REQUESTS"
+
+write_shared_json() {
+  local target="$1"
+  local temporary="${target}.$$"
+  cat >"$temporary"
+  chown "root:$WEB_GID" "$temporary"
+  chmod 660 "$temporary"
+  mv -f "$temporary" "$target"
+}
+
+write_heartbeat() {
+  touch "$HEARTBEAT"
+  chown "root:$WEB_GID" "$HEARTBEAT"
+  chmod 640 "$HEARTBEAT"
+}
 
 due_now() {
   local frequency hour minute weekday now_hour now_minute now_weekday today marker
@@ -41,24 +57,38 @@ prune_backups() {
 }
 
 run_backup() {
-  local output status
+  local output status heartbeat_pid
+  jq -n \
+    --arg status "running" \
+    --arg startedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    --arg message "Creating encrypted backup. Large installations can take several minutes." \
+    '{status: $status, startedAt: $startedAt, message: $message}' \
+    | write_shared_json "$STATUS"
+  (
+    while true; do
+      write_heartbeat
+      sleep 15
+    done
+  ) &
+  heartbeat_pid="$!"
   if output="$(/usr/local/bin/overleaf-backup create 2>&1)"; then
     status="success"
   else
     status="failed"
   fi
+  kill "$heartbeat_pid" 2>/dev/null || true
+  wait "$heartbeat_pid" 2>/dev/null || true
   jq -n \
     --arg status "$status" \
     --arg finishedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     --arg message "$output" \
     '{status: $status, finishedAt: $finishedAt, message: $message}' \
-    >"$STATUS"
-  chown "root:$WEB_GID" "$STATUS"
-  chmod 640 "$STATUS"
+    | write_shared_json "$STATUS"
   [[ "$status" == "success" ]]
 }
 
 while true; do
+  write_heartbeat
   if compgen -G "$REQUESTS/create-*" >/dev/null; then
     rm -f -- "$REQUESTS"/create-*
     run_backup || true
@@ -67,5 +97,5 @@ while true; do
     run_backup || true
     prune_backups
   fi
-  sleep 30
+  sleep 5
 done

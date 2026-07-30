@@ -4,6 +4,7 @@ import Path from 'node:path'
 import Settings from '@overleaf/settings'
 
 const ARCHIVE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*\.tar\.gz\.gpg$/
+const SCHEDULER_HEARTBEAT_MAX_AGE_MS = 90_000
 
 function storagePath() {
   return Settings.backupStoragePath || '/var/lib/overleaf/backups'
@@ -50,6 +51,21 @@ async function readLastRun() {
   }
 }
 
+async function schedulerIsAvailable() {
+  try {
+    const stat = await fs.stat(
+      Path.join(storagePath(), '.scheduler-heartbeat')
+    )
+    return Date.now() - stat.mtimeMs <= SCHEDULER_HEARTBEAT_MAX_AGE_MS
+  } catch {
+    return false
+  }
+}
+
+function redirectWithMessage(res, type, message) {
+  res.redirect(`/admin/backups?${type}=${encodeURIComponent(message)}`)
+}
+
 async function listArchives() {
   await fs.mkdir(storagePath(), { recursive: true })
   const entries = await fs.readdir(storagePath(), { withFileTypes: true })
@@ -71,10 +87,11 @@ async function listArchives() {
 }
 
 async function index(req, res) {
-  const [archives, schedule, lastRun] = await Promise.all([
+  const [archives, schedule, lastRun, schedulerAvailable] = await Promise.all([
     listArchives(),
     readSchedule(),
     readLastRun(),
+    schedulerIsAvailable(),
   ])
   res.render(
     Path.resolve(import.meta.dirname, '../views/backup-manager.pug'),
@@ -83,6 +100,7 @@ async function index(req, res) {
       archives,
       schedule,
       lastRun,
+      schedulerAvailable,
       enabled: Settings.backupManagerEnabled,
       encryptionConfigured: encryptionConfigured(),
       backupStoragePath: storagePath(),
@@ -94,23 +112,57 @@ async function index(req, res) {
 
 async function create(req, res) {
   if (!Settings.backupManagerEnabled) {
-    return res.redirect('/admin/backups?error=Backup Manager is disabled')
+    return redirectWithMessage(res, 'error', 'Backup Manager is disabled')
   }
   if (!encryptionConfigured()) {
-    return res.redirect(
-      '/admin/backups?error=Configure BACKUP_ENCRYPTION_PASSPHRASE first'
+    return redirectWithMessage(
+      res,
+      'error',
+      'Configure BACKUP_ENCRYPTION_PASSPHRASE first'
     )
   }
-  const requestDirectory = Path.join(storagePath(), '.requests')
-  await fs.mkdir(requestDirectory, { recursive: true })
-  await fs.writeFile(
-    Path.join(
-      requestDirectory,
-      `create-${Date.now()}-${crypto.randomUUID()}`
-    ),
-    ''
-  )
-  res.redirect('/admin/backups?notice=Backup request queued')
+  if (!(await schedulerIsAvailable())) {
+    return redirectWithMessage(
+      res,
+      'error',
+      'Backup service is not running. Start it with: docker compose up -d backup-manager'
+    )
+  }
+
+  try {
+    const requestDirectory = Path.join(storagePath(), '.requests')
+    await fs.mkdir(requestDirectory, { recursive: true })
+    const requestId = `${Date.now()}-${crypto.randomUUID()}`
+    const pendingRequest = Path.join(requestDirectory, `.pending-${requestId}`)
+    await fs.writeFile(pendingRequest, '', {
+      flag: 'wx',
+      mode: 0o660,
+    })
+    await fs.writeFile(
+      Path.join(storagePath(), 'last-run.json'),
+      `${JSON.stringify({
+        status: 'queued',
+        requestedAt: new Date().toISOString(),
+        message: 'Waiting for the backup service to start this request.',
+      })}\n`,
+      { mode: 0o660 }
+    )
+    await fs.rename(
+      pendingRequest,
+      Path.join(requestDirectory, `create-${requestId}`)
+    )
+    return redirectWithMessage(
+      res,
+      'notice',
+      'Backup request queued. This page will update automatically.'
+    )
+  } catch (error) {
+    return redirectWithMessage(
+      res,
+      'error',
+      `Could not queue backup: ${error.message}`
+    )
+  }
 }
 
 async function updateSchedule(req, res) {
