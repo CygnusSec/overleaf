@@ -6,12 +6,17 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { pipeline } from 'node:stream/promises'
 import ProjectEntityHandler from '../../../../app/src/Features/Project/ProjectEntityHandler.mjs'
+import SafePath from '../../../../app/src/Features/Project/SafePath.mjs'
 import UpdateMerger from '../../../../app/src/Features/ThirdPartyDataStore/UpdateMerger.mjs'
 import HistoryManager from '../../../../app/src/Features/History/HistoryManager.mjs'
 
 const execFileAsync = promisify(execFile)
 const MAX_FILES = 2000
 const MAX_FILE_SIZE = 50 * 1024 * 1024
+
+function isIgnoredGitSyncPath(filePath) {
+  return filePath.split('/').includes('.DS_Store')
+}
 
 export function normalizeSyncPath(value) {
   if (value == null || value === '') return ''
@@ -135,6 +140,7 @@ async function listRepositoryFiles(root) {
   async function walk(directory, relative = '') {
     for (const entry of await fs.readdir(directory, { withFileTypes: true })) {
       if (!relative && entry.name === '.git') continue
+      if (entry.name === '.DS_Store') continue
       const nextRelative = relative
         ? path.posix.join(relative, entry.name)
         : entry.name
@@ -179,25 +185,50 @@ async function importDirectory(projectId, userId, repositoryDir, syncPath) {
     )
   }
   const repositoryFiles = await listRepositoryFiles(syncDirectory)
+  for (const file of repositoryFiles) {
+    const invalidSegment = file.path
+      .split('/')
+      .find(
+        segment =>
+          !SafePath.isCleanFilename(segment) ||
+          SafePath.isBlockedFilename(segment)
+      )
+    if (
+      invalidSegment ||
+      !SafePath.isAllowedLength(file.path) ||
+      !SafePath.isCleanPath(file.path)
+    ) {
+      throw new Error(
+        `GitHub path cannot be imported into Overleaf: "${file.path}". Rename the invalid file or folder in the repository and pull again.`
+      )
+    }
+  }
   const incomingPaths = new Set(repositoryFiles.map(file => file.path))
   for (const currentPath of await getCurrentProjectPaths(projectId)) {
     if (!incomingPaths.has(currentPath)) {
       await UpdateMerger.promises.deleteUpdate(
         userId,
         projectId,
-        currentPath,
+        `/${currentPath}`,
         'github'
       )
     }
   }
   for (const file of repositoryFiles) {
-    await UpdateMerger.promises.mergeUpdate(
-      userId,
-      projectId,
-      file.path,
-      createReadStream(file.absolute),
-      'github'
-    )
+    try {
+      await UpdateMerger.promises.mergeUpdate(
+        userId,
+        projectId,
+        `/${file.path}`,
+        createReadStream(file.absolute),
+        'github'
+      )
+    } catch (error) {
+      throw new Error(
+        `Could not import GitHub path "${file.path}": ${error.message}`,
+        { cause: error }
+      )
+    }
   }
 }
 
@@ -216,11 +247,13 @@ async function exportProject(projectId, repositoryDir, syncPath) {
     ProjectEntityHandler.promises.getAllFiles(projectId),
   ])
   for (const [filePath, doc] of Object.entries(docs)) {
+    if (isIgnoredGitSyncPath(filePath)) continue
     const target = getProjectFileTarget(syncDirectory, filePath)
     await fs.mkdir(path.dirname(target), { recursive: true })
     await fs.writeFile(target, doc.lines.join('\n'))
   }
   for (const [filePath, file] of Object.entries(files)) {
+    if (isIgnoredGitSyncPath(filePath)) continue
     const target = getProjectFileTarget(syncDirectory, filePath)
     await fs.mkdir(path.dirname(target), { recursive: true })
     const result = await HistoryManager.promises.requestBlobWithProjectId(
