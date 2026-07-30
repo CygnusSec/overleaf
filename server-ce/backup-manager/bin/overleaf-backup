@@ -69,6 +69,20 @@ create_backup() {
   tar \
     --exclude='./.git' \
     --exclude='./.cache' \
+    --exclude='./backups' \
+    --exclude='./backups/**' \
+    --exclude='./data' \
+    --exclude='./data/**' \
+    --exclude='./mongodb' \
+    --exclude='./mongodb/**' \
+    --exclude='./mongo_data' \
+    --exclude='./mongo_data/**' \
+    --exclude='./redis' \
+    --exclude='./redis/**' \
+    --exclude='./redis_data' \
+    --exclude='./redis_data/**' \
+    --exclude='./sharelatex_data' \
+    --exclude='./sharelatex_data/**' \
     --exclude='**/node_modules' \
     --exclude='**/.yarn/cache' \
     --exclude='**/coverage' \
