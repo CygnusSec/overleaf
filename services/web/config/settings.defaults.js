@@ -1127,6 +1127,7 @@ module.exports = {
 
   moduleImportSequence: [
     'history-v1',
+    'backup-manager',
     'git-sync',
     'track-changes',
     'launchpad',
@@ -1163,6 +1164,10 @@ module.exports = {
   useLocalPandocConversions:
     process.env.LOCAL_PANDOC_CONVERSIONS === 'true',
   enableGitSync: process.env.GIT_INTEGRATION_ENABLED === 'true',
+  backupManagerEnabled: process.env.BACKUP_MANAGER_ENABLED === 'true',
+  backupStoragePath:
+    process.env.BACKUP_STORAGE_PATH || '/var/lib/overleaf/backups',
+  backupEncryptionPassphrase: process.env.BACKUP_ENCRYPTION_PASSPHRASE,
   gitIntegrationEncryptionKey: process.env.GIT_INTEGRATION_ENCRYPTION_KEY,
   githubSyncClientId: process.env.GITHUB_SYNC_CLIENT_ID,
   githubSyncClientSecret: process.env.GITHUB_SYNC_CLIENT_SECRET,

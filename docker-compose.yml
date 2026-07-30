@@ -13,6 +13,7 @@ services:
     stop_grace_period: ${SHARELATEX_STOP_GRACE_PERIOD}
     volumes:
       - ${SHARELATEX_DATA_PATH}:/var/lib/overleaf
+      - ${BACKUP_DATA_PATH}:/var/lib/overleaf/backups
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
     environment:
@@ -49,6 +50,9 @@ services:
       GIT_INTEGRATION_ENCRYPTION_KEY: ${GIT_INTEGRATION_ENCRYPTION_KEY}
       GITHUB_SYNC_CLIENT_ID: ${GITHUB_SYNC_CLIENT_ID}
       GITHUB_SYNC_CLIENT_SECRET: ${GITHUB_SYNC_CLIENT_SECRET}
+      BACKUP_MANAGER_ENABLED: "${BACKUP_MANAGER_ENABLED}"
+      BACKUP_STORAGE_PATH: /var/lib/overleaf/backups
+      BACKUP_ENCRYPTION_PASSPHRASE: ${BACKUP_ENCRYPTION_PASSPHRASE}
     networks:
       - overleaf-net
 
@@ -82,6 +86,63 @@ services:
     restart: ${REDIS_RESTART_POLICY}
     volumes:
       - ${REDIS_DATA_PATH}:/data
+    networks:
+      - overleaf-net
+
+  backup-manager:
+    image: ${BACKUP_MANAGER_IMAGE}
+    container_name: ${BACKUP_MANAGER_CONTAINER_NAME}
+    restart: ${BACKUP_MANAGER_RESTART_POLICY}
+    cpus: ${BACKUP_CPU_LIMIT}
+    mem_limit: ${BACKUP_MEMORY_LIMIT}
+    pids_limit: 256
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ${BACKUP_DATA_PATH}:/backups
+      - ${SHARELATEX_DATA_PATH}:/source/sharelatex:ro
+      - .:/deployment:ro
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+    environment:
+      TZ: ${TZ}
+      BACKUP_ROOT: /backups
+      OVERLEAF_MONGO_URL: ${OVERLEAF_MONGO_URL}
+      REDIS_HOST: ${REDIS_HOST}
+      SHARELATEX_IMAGE: ${SHARELATEX_IMAGE}
+      MONGO_IMAGE: ${MONGO_IMAGE}
+      REDIS_IMAGE: ${REDIS_IMAGE}
+      BACKUP_WEB_UID: ${BACKUP_WEB_UID}
+      BACKUP_WEB_GID: ${BACKUP_WEB_GID}
+      BACKUP_REDIS_UID: ${BACKUP_REDIS_UID}
+      BACKUP_REDIS_GID: ${BACKUP_REDIS_GID}
+      BACKUP_MIN_FREE_GB: ${BACKUP_MIN_FREE_GB}
+      BACKUP_QUIESCE_SECONDS: ${BACKUP_QUIESCE_SECONDS}
+      BACKUP_ENCRYPTION_PASSPHRASE: ${BACKUP_ENCRYPTION_PASSPHRASE}
+    networks:
+      - overleaf-net
+
+  backup-restore:
+    image: ${BACKUP_MANAGER_IMAGE}
+    container_name: ${BACKUP_RESTORE_CONTAINER_NAME}
+    profiles:
+      - restore
+    volumes:
+      - ${BACKUP_DATA_PATH}:/backups
+      - ${SHARELATEX_DATA_PATH}:/restore/sharelatex
+      - ${REDIS_DATA_PATH}:/restore/redis
+      - .:/deployment
+    environment:
+      TZ: ${TZ}
+      BACKUP_ROOT: /backups
+      OVERLEAF_MONGO_URL: ${OVERLEAF_MONGO_URL}
+      REDIS_HOST: ${REDIS_HOST}
+      BACKUP_REDIS_UID: ${BACKUP_REDIS_UID}
+      BACKUP_REDIS_GID: ${BACKUP_REDIS_GID}
+      BACKUP_ENCRYPTION_PASSPHRASE: ${BACKUP_ENCRYPTION_PASSPHRASE}
     networks:
       - overleaf-net
 

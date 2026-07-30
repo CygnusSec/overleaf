@@ -1,0 +1,174 @@
+extends ../../../../app/views/layout-marketing
+
+block content
+	#main-content.content.content-alt
+		.container
+			.card
+				.card-body
+					.page-header
+						h1 Backup & Restore
+
+					if notice
+						.alert.alert-success= notice
+					if error
+						.alert.alert-danger= error
+					if !enabled
+						.alert.alert-warning Backup Manager is disabled in configuration.
+					if enabled && !encryptionConfigured
+						.alert.alert-danger Configure BACKUP_ENCRYPTION_PASSPHRASE before creating backups.
+					if enabled && encryptionConfigured && !schedulerAvailable
+						.alert.alert-danger
+							strong Backup service is offline.
+							|  Start or recreate it with
+							code docker compose up -d --force-recreate backup-manager
+							| .
+					if lastRun
+						.alert(class=lastRun.status === 'success' ? 'alert-success' : lastRun.status === 'failed' ? 'alert-danger' : 'alert-info')
+							strong Backup status: #{lastRun.status}
+							if lastRunDisplayTime
+								if lastRun.finishedAt
+									|  at #{lastRunDisplayTime}.
+								else if lastRun.startedAt
+									|  since #{lastRunDisplayTime}.
+								else
+									|  requested at #{lastRunDisplayTime}.
+							if lastRun.message
+								details(open=lastRun.status === 'failed' || lastRun.status === 'running')
+									summary= lastRun.status === 'running' ? 'Live backup log' : 'Backup details'
+									pre
+										code= lastRun.status === 'running' && currentRunLog ? currentRunLog : lastRun.message
+							if !['queued', 'running'].includes(lastRun.status)
+								form.mt-2(method='post' action='/admin/backups/status/clear')
+									input(name='_csrf' type='hidden' value=csrfToken)
+									button.btn.btn-sm.btn-secondary(type='submit') Clear status
+							else
+								if queueStalled
+									p.text-danger The backup service has not consumed this request after one minute. Check the backup-manager logs or cancel this request.
+								form.mt-2(
+									method='post'
+									action='/admin/backups/cancel'
+								)
+									input(name='_csrf' type='hidden' value=csrfToken)
+									button.btn.btn-sm.btn-danger(type='submit') Cancel backup
+
+					.row
+						.col-md-6
+							h2 Create backup
+							p.text-muted Includes MongoDB, Redis, project/history data and deployment configuration.
+							p.small.text-muted Active editors are disconnected and the site enters maintenance mode until the snapshot completes.
+							form(method='post' action='/admin/backups/create')
+								input(name='_csrf' type='hidden' value=csrfToken)
+								button.btn.btn-primary(
+									type='submit'
+									disabled=!enabled || !encryptionConfigured || !schedulerAvailable || (lastRun && ['queued', 'running'].includes(lastRun.status))
+								)= lastRun && ['queued', 'running'].includes(lastRun.status) ? 'Backup in progress…' : 'Create backup now'
+
+						.col-md-6
+							h2 Import backup archive
+							p.text-muted Upload an archive copied from another server.
+							form(method='post' action=`/admin/backups/import?_csrf=${encodeURIComponent(csrfToken)}` enctype='multipart/form-data')
+								.form-group
+									input.form-control(
+										name='backup'
+										type='file'
+										accept='.tar.gz.gpg,application/pgp-encrypted'
+										required
+									)
+								button.btn.btn-secondary(type='submit') Import archive
+
+					hr
+					h2 Scheduled backups
+					form(method='post' action='/admin/backups/schedule')
+						input(name='_csrf' type='hidden' value=csrfToken)
+						.row
+							.col-sm-2
+								.form-group
+									label.form-label(for='backup-enabled') Status
+									select#backup-enabled.form-control(name='enabled')
+										option(value='false' selected=!schedule.enabled) Disabled
+										option(value='true' selected=schedule.enabled) Enabled
+							.col-sm-2
+								.form-group
+									label.form-label(for='backup-frequency') Frequency
+									select#backup-frequency.form-control(name='frequency')
+										option(value='daily' selected=schedule.frequency === 'daily') Daily
+										option(value='weekly' selected=schedule.frequency === 'weekly') Weekly
+							.col-sm-2
+								.form-group
+									label.form-label(for='backup-weekday') Weekday
+									select#backup-weekday.form-control(name='weekday')
+										each day, index in ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+											option(value=index selected=Number(schedule.weekday) === index)= day
+							.col-sm-2
+								.form-group
+									label.form-label(for='backup-hour') Hour
+									input#backup-hour.form-control(name='hour' type='number' min='0' max='23' value=schedule.hour required)
+							.col-sm-2
+								.form-group
+									label.form-label(for='backup-minute') Minute
+									input#backup-minute.form-control(name='minute' type='number' min='0' max='59' value=schedule.minute required)
+							.col-sm-2
+								.form-group
+									label.form-label(for='backup-retention') Keep copies
+									input#backup-retention.form-control(name='retention' type='number' min='1' max='365' value=schedule.retention required)
+						button.btn.btn-primary(type='submit' disabled=!enabled || !encryptionConfigured) Save schedule
+						p.small.text-muted Times use the server timezone.
+
+					hr
+					h2 Available backups
+					if archives.length
+						.table-responsive
+							table.table
+								thead
+									tr
+										th Archive
+										th Created
+										th Size
+										th Integrity
+										th Actions
+								tbody
+									each archive in archives
+										tr
+											td
+												code= archive.name
+											td= archive.createdAtDisplay
+											td= (archive.size / 1024 / 1024).toFixed(1) + ' MB'
+											td= archive.hasChecksum ? 'SHA-256' : 'Archive only'
+											td
+												a.btn.btn-sm.btn-secondary(
+													href=`/admin/backups/${archive.name}/download`
+												) Download
+												form.d-inline(
+													method='post'
+													action=`/admin/backups/${archive.name}/delete`
+												)
+													input(name='_csrf' type='hidden' value=csrfToken)
+													button.btn.btn-sm.btn-danger(type='submit') Delete
+					else
+						p.text-muted No backup archives found in #{backupStoragePath}.
+
+					hr
+					h2 Restore a server
+					.alert.alert-warning
+						strong Restore is an offline operation.
+						|  It replaces the current MongoDB, Redis, project data and deployment configuration.
+					p On a new server, run the initialization wizard and choose “Import an existing backup”:
+					pre
+						code ./server-ce/bin/init-server
+					p Or run the restore sequence manually:
+					pre
+						code docker compose stop sharelatex redis backup-manager cloudflared
+							| &#10;docker compose up -d mongo
+							| &#10;docker compose pull backup-manager
+							| &#10;docker compose --profile restore run --rm --no-deps backup-restore restore /backups/ARCHIVE.tar.gz.gpg --confirm-data-loss
+							| &#10;docker compose up -d
+
+	if lastRun && ['queued', 'running'].includes(lastRun.status)
+		script(nonce=scriptNonce).
+			window.setTimeout(() => window.location.replace('/admin/backups'), 5000)
+
+	if notice || error
+		script(nonce=scriptNonce).
+			if (window.history && window.history.replaceState) {
+				window.history.replaceState({}, document.title, '/admin/backups')
+			}
