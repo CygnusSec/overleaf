@@ -68,6 +68,7 @@ export default function AiAssistantPanel() {
   const loadRequestRef = useRef(0)
   const modelRequestRef = useRef(0)
   const projectIdRef = useRef(projectId)
+  const requestInFlightRef = useRef(false)
   const canWrite =
     permissionsLevel === 'owner' || permissionsLevel === 'readAndWrite'
 
@@ -80,6 +81,7 @@ export default function AiAssistantPanel() {
     }
     setLoading(true)
     setBusy(false)
+    requestInFlightRef.current = false
     setError(undefined)
     setProposal(undefined)
     setMessages([])
@@ -184,8 +186,10 @@ export default function AiAssistantPanel() {
 
   const run = async (event: FormEvent) => {
     event.preventDefault()
+    if (requestInFlightRef.current) return
     const content = getCurrentDocValue()
     if (!content || !prompt.trim()) return
+    requestInFlightRef.current = true
     const requestProjectId = projectId
     const selection =
       view && !view.state.selection.main.empty
@@ -262,6 +266,7 @@ export default function AiAssistantPanel() {
       )
     } finally {
       if (projectIdRef.current === requestProjectId) {
+        requestInFlightRef.current = false
         setBusy(false)
       }
     }
@@ -501,7 +506,12 @@ export default function AiAssistantPanel() {
               value={prompt}
               onChange={event => setPrompt(event.target.value)}
               onKeyDown={event => {
-                if (event.key === 'Enter' && !event.shiftKey) {
+                if (
+                  event.key === 'Enter' &&
+                  !event.shiftKey &&
+                  !event.nativeEvent.isComposing &&
+                  event.nativeEvent.keyCode !== 229
+                ) {
                   event.preventDefault()
                   event.currentTarget.form?.requestSubmit()
                 }
