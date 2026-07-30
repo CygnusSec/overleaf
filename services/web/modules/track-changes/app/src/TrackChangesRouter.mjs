@@ -23,6 +23,13 @@ function apply(webRouter) {
     canRead,
     TrackChangesController.getProjectRanges
   )
+  webRouter.get(
+    '/project/:project_id/changes/users',
+    login,
+    notRestricted,
+    canRead,
+    TrackChangesController.getChangesUsers
+  )
   webRouter.post(
     '/project/:project_id/thread/:thread_id/messages',
     login,

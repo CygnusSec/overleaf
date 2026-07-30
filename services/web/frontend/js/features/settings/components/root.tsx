@@ -1,5 +1,5 @@
 import SecuritySection from '@/features/settings/components/security-section'
-import { useEffect } from 'react'
+import { ElementType, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import getMeta from '../../../utils/meta'
 import EmailsSection from './emails-section'
@@ -23,6 +23,11 @@ import OLCol from '@/shared/components/ol/ol-col'
 import OLPageContentCard from '@/shared/components/ol/ol-page-content-card'
 import { isSplitTestEnabled } from '@/utils/splitTestUtils'
 import NotificationsSection from './notifications-section'
+import importOverleafModules from '../../../../macros/import-overleaf-module.macro'
+
+const accountSettingsSections = importOverleafModules(
+  'accountSettingsSections'
+) as { import: { default: ElementType }; path: string }[]
 
 function SettingsPageRoot() {
   const { isReady } = useWaitForI18n()
@@ -47,6 +52,7 @@ function SettingsPageContent() {
   const { t } = useTranslation()
   const { isOverleaf, labsEnabled } = getMeta('ol-ExposedSettings')
   const inNotificationsSplitTest = isSplitTestEnabled('email-notifications')
+  const aiAssistantEnabled = getMeta('ol-aiAssistantEnabled')
   return (
     <UserProvider>
       <OLPageContentCard>
@@ -82,6 +88,16 @@ function SettingsPageContent() {
             </>
           ) : null}
           <SessionsSection />
+          {aiAssistantEnabled
+            ? accountSettingsSections.map(
+                ({ import: { default: Component }, path }) => (
+                  <div key={path}>
+                    <hr />
+                    <Component />
+                  </div>
+                )
+              )
+            : null}
           {isOverleaf ? (
             <>
               <hr />

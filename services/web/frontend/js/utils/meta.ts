@@ -138,6 +138,7 @@ export interface Meta {
   'ol-galleryTagName': string
   'ol-gitBridgeEnabled': boolean
   'ol-gitSyncEnabled': boolean
+  'ol-aiAssistantEnabled': boolean
   'ol-gitBridgePublicBaseUrl': string
   'ol-github': { enabled: boolean; error: boolean }
   'ol-groupAuditLogs': []

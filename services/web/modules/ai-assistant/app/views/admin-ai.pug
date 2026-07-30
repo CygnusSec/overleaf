@@ -1,0 +1,80 @@
+extends ../../../../app/views/layout-marketing
+
+block content
+  #main-content.content.content-alt
+    .container
+      .card
+        .card-body
+          .page-header
+            h1 Shared Local AI
+            p.text-muted Configure trusted AI endpoints available to every user. Credentials are encrypted before storage.
+          if !providers.length
+            .notification.notification-info
+              .notification-content No shared Local AI providers have been configured yet.
+          each provider in providers
+            .card.mb-4
+              .card-body
+                .d-flex.align-items-center.justify-content-between.mb-3
+                  h2.h4.mb-0= provider.name
+                  if provider.enabled
+                    span.badge.bg-success Available
+                  else
+                    span.badge.bg-secondary Disabled
+                form(method='post' action=`/admin/ai-providers/${provider._id}`)
+                  input(type='hidden' name='_csrf' value=csrfToken)
+                  .row
+                    .col-md-3.form-group
+                      label.form-label Name
+                      input.form-control(name='name' value=provider.name required)
+                    .col-md-2.form-group
+                      label.form-label Adapter
+                      select.form-control(name='adapter')
+                        option(value='openai-compatible' selected=provider.adapter === 'openai-compatible') OpenAI compatible
+                        option(value='ollama' selected=provider.adapter === 'ollama') Ollama native
+                    .col-md-4.form-group
+                      label.form-label Endpoint
+                      input.form-control(name='baseUrl' value=provider.baseUrl required)
+                    .col-md-3.form-group
+                      label.form-label Model
+                      input.form-control(name='model' value=provider.model required)
+                  .form-group
+                    label.form-label Replacement API key
+                    input.form-control(type='password' name='apiKey' autocomplete='new-password' placeholder='Leave blank to keep the current key')
+                  .form-check.mb-3
+                    input.form-check-input(
+                      id=`ai-enabled-${provider._id}`
+                      type='checkbox'
+                      name='enabled'
+                      checked=provider.enabled
+                    )
+                    label.form-check-label(for=`ai-enabled-${provider._id}`) Available to all users
+                  button.btn.btn-primary(type='submit') Save changes
+                hr
+                form(method='post' action=`/admin/ai-providers/${provider._id}/delete`)
+                  input(type='hidden' name='_csrf' value=csrfToken)
+                  button.btn.btn-outline-danger(type='submit') Delete provider
+          hr
+          h2 Add Local AI
+          form(method='post' action='/admin/ai-providers')
+            input(type='hidden' name='_csrf' value=csrfToken)
+            .form-group
+              label.form-label Name
+              input.form-control(name='name' required)
+            .form-group
+              label.form-label Adapter
+              select.form-control(name='adapter')
+                option(value='openai-compatible') OpenAI compatible
+                option(value='ollama') Ollama compatible
+            .form-group
+              label.form-label Endpoint
+              input.form-control(name='baseUrl' placeholder='Ollama: http://ollama:11434 · OpenAI compatible: http://vllm:8000/v1' required)
+            .form-group
+              label.form-label Model
+              input.form-control(name='model' required)
+            .form-group
+              label.form-label API key (optional)
+              input.form-control(type='password' name='apiKey' autocomplete='new-password')
+            .form-check.mb-3
+              input#new-ai-enabled.form-check-input(type='checkbox' name='enabled' checked)
+              label.form-check-label(for='new-ai-enabled') Available to all users
+            button.btn.btn-primary(type='submit') Add provider

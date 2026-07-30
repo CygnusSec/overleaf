@@ -1,9 +1,11 @@
 import { expressify } from '@overleaf/promise-utils'
 import ChatApiHandler from '../../../../app/src/Features/Chat/ChatApiHandler.mjs'
 import ChatManager from '../../../../app/src/Features/Chat/ChatManager.mjs'
+import DocstoreManager from '../../../../app/src/Features/Docstore/DocstoreManager.mjs'
 import DocumentUpdaterHandler from '../../../../app/src/Features/DocumentUpdater/DocumentUpdaterHandler.mjs'
 import EditorRealTimeController from '../../../../app/src/Features/Editor/EditorRealTimeController.mjs'
 import SessionManager from '../../../../app/src/Features/Authentication/SessionManager.mjs'
+import UserGetter from '../../../../app/src/Features/User/UserGetter.mjs'
 import UserInfoController from '../../../../app/src/Features/User/UserInfoController.mjs'
 import UserInfoManager from '../../../../app/src/Features/User/UserInfoManager.mjs'
 
@@ -33,6 +35,35 @@ async function getProjectRanges(req, res) {
     req.params.project_id
   )
   res.json(ranges)
+}
+
+async function getChangesUsers(req, res) {
+  const ids = await DocstoreManager.promises.getTrackedChangesUserIds(
+    req.params.project_id
+  )
+  const projection = { email: 1, first_name: 1, last_name: 1 }
+  const currentIds = ids.filter(
+    id => typeof id === 'string' && /^[a-f0-9]{24}$/i.test(id)
+  )
+  const legacyIds = ids.filter(id => Number.isSafeInteger(id))
+  const [users, legacyUsers] = await Promise.all([
+    UserGetter.promises.getUsers(currentIds, projection),
+    UserGetter.promises.getUsersByV1Ids(legacyIds, {
+      ...projection,
+      overleaf: 1,
+    }),
+  ])
+  res.json(
+    [
+      ...users.map(user => ({ user, id: user._id.toString() })),
+      ...legacyUsers.map(user => ({ user, id: String(user.overleaf.id) })),
+    ].map(({ user, id }) => ({
+      id,
+      email: user.email,
+      first_name: user.first_name,
+      last_name: user.last_name,
+    }))
+  )
 }
 
 async function sendComment(req, res) {
@@ -213,6 +244,7 @@ async function acceptChanges(req, res) {
 export default {
   getThreads: expressify(getThreads),
   getProjectRanges: expressify(getProjectRanges),
+  getChangesUsers: expressify(getChangesUsers),
   sendComment: expressify(sendComment),
   resolveThread: expressify(resolveThread),
   reopenThread: expressify(reopenThread),
