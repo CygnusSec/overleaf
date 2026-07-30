@@ -366,6 +366,94 @@
       padding-left: 0;
     }
   }
+
+  .github-sync-changes {
+    display: grid;
+    overflow: hidden;
+    border: 1px solid var(--border-divider);
+    border-radius: var(--border-radius-base);
+    background: var(--bg-secondary-themed);
+  }
+
+  .github-sync-changes-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-03);
+    padding: var(--spacing-03);
+    border-bottom: 1px solid var(--border-divider);
+
+    > span {
+      display: grid;
+      min-width: 0;
+    }
+
+    small {
+      color: var(--content-secondary);
+    }
+  }
+
+  .github-sync-change-select-all,
+  .github-sync-change {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-02);
+    margin: 0;
+    cursor: pointer;
+  }
+
+  .github-sync-change-select-all {
+    padding: var(--spacing-02) var(--spacing-03);
+    border-bottom: 1px solid var(--border-divider);
+    font-weight: 600;
+  }
+
+  .github-sync-change-list {
+    max-height: 260px;
+    overflow-y: auto;
+  }
+
+  .github-sync-change {
+    padding: var(--spacing-02) var(--spacing-03);
+    border-bottom: 1px solid var(--border-divider);
+
+    &:last-child {
+      border-bottom: 0;
+    }
+
+    code {
+      overflow: hidden;
+      color: var(--content-primary);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
+  .github-sync-change-status {
+    display: inline-grid;
+    width: 22px;
+    height: 22px;
+    flex: 0 0 22px;
+    place-items: center;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .github-sync-change-status-added {
+    color: var(--content-positive);
+    background: var(--bg-accent-03);
+  }
+
+  .github-sync-change-status-modified {
+    color: var(--content-warning);
+    background: var(--bg-warning-03);
+  }
+
+  .github-sync-change-status-deleted {
+    color: var(--content-danger);
+    background: var(--bg-danger-03);
+  }
 }
 
 @include media-breakpoint-down(sm) {

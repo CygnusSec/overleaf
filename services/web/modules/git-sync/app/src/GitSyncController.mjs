@@ -21,6 +21,7 @@ import {
   getUser,
 } from './GithubApi.mjs'
 import {
+  getProjectChanges,
   normalizeSyncPath,
   pullProject,
   pushProject,
@@ -430,6 +431,44 @@ async function unlink(req, res) {
   res.sendStatus(204)
 }
 
+async function changes(req, res) {
+  if (!requireConfiguration(res)) return
+  if (!(await requireProjectOwner(req, res))) return
+  const projectId = req.params.projectId
+  if (activeProjects.has(projectId)) {
+    return res.status(409).json({ message: 'A GitHub sync is already running' })
+  }
+  const [connection, link] = await Promise.all([
+    getConnection(currentUserId(req)),
+    GitProjectLink.findOne({ projectId }),
+  ])
+  if (!connection || !link) {
+    return res.status(400).json({ message: 'Link a GitHub repository first' })
+  }
+  activeProjects.add(projectId)
+  try {
+    const token = decryptSecret(connection.token)
+    const projectChanges = await getProjectChanges(link, token)
+    res.json({ changes: projectChanges })
+  } catch (error) {
+    logger.error(
+      {
+        err: error,
+        projectId,
+        repositoryFullName: link.repositoryFullName,
+        branch: link.branch,
+        syncPath: link.syncPath || '',
+      },
+      'Failed to get GitHub sync status'
+    )
+    res.status(error.code === 'ENOENT' ? 503 : 422).json({
+      message: gitSyncErrorMessage(error),
+    })
+  } finally {
+    activeProjects.delete(projectId)
+  }
+}
+
 async function runSync(req, res, direction) {
   if (!requireConfiguration(res)) return
   if (!(await requireProjectOwner(req, res))) return
@@ -457,11 +496,18 @@ async function runSync(req, res, direction) {
     if (direction === 'pull') {
       commit = await pullProject(link, token, currentUserId(req))
     } else {
-      const result = await pushProject(link, token, {
-        name: [user.first_name, user.last_name].filter(Boolean).join(' '),
-        email: user.email,
-        message: req.body.message,
-      })
+      const result = await pushProject(
+        link,
+        token,
+        {
+          name: [user.first_name, user.last_name].filter(Boolean).join(' '),
+          email: user.email,
+          message: req.body.message,
+        },
+        {
+          paths: req.body.paths,
+        }
+      )
       ;({ commit, changed } = result)
     }
     link.lastSyncedCommit = commit
@@ -551,6 +597,7 @@ export default {
   directories,
   disconnect,
   getLink,
+  changes,
   saveLink,
   createAndLinkRepository,
   unlink,

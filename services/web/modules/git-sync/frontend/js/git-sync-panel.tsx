@@ -35,6 +35,11 @@ type LinkStatus = {
   }
 }
 
+type GitChange = {
+  path: string
+  status: 'added' | 'modified' | 'deleted'
+}
+
 export default function GitSyncPanel() {
   const { t } = useTranslation()
   const { projectId, permissionsLevel } = useIdeReactContext()
@@ -57,11 +62,35 @@ export default function GitSyncPanel() {
   const [editingLinkedBranch, setEditingLinkedBranch] = useState(false)
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
+  const [loadingChanges, setLoadingChanges] = useState(false)
+  const [changes, setChanges] = useState<GitChange[]>([])
+  const [selectedChanges, setSelectedChanges] = useState<Set<string>>(
+    new Set()
+  )
   const [notice, setNotice] = useState<string>()
   const [error, setError] = useState<string>()
   const selectedRepositoryDetails = repositories.find(
     item => item.fullName === selectedRepository
   )
+
+  const loadChanges = useCallback(async () => {
+    setLoadingChanges(true)
+    try {
+      const result = await getJSON<{ changes: GitChange[] }>(
+        `/project/${projectId}/github-sync/changes`
+      )
+      setChanges(result.changes)
+      setSelectedChanges(new Set(result.changes.map(change => change.path)))
+    } catch (error) {
+      setError(
+        error instanceof FetchError
+          ? error.getUserFacingMessage()
+          : t('github_sync_error')
+      )
+    } finally {
+      setLoadingChanges(false)
+    }
+  }, [projectId, t])
 
   const load = useCallback(async () => {
     try {
@@ -90,6 +119,15 @@ export default function GitSyncPanel() {
   useEffect(() => {
     if (enabled && permissionsLevel === 'owner') load()
   }, [enabled, permissionsLevel, load])
+
+  useEffect(() => {
+    if (enabled && permissionsLevel === 'owner' && status?.link) {
+      loadChanges()
+    } else {
+      setChanges([])
+      setSelectedChanges(new Set())
+    }
+  }, [enabled, permissionsLevel, status?.link, loadChanges])
 
   if (!enabled) return null
   if (permissionsLevel !== 'owner') {
@@ -180,7 +218,12 @@ export default function GitSyncPanel() {
     try {
       const result = await postJSON<{ changed?: boolean }>(
         `/project/${projectId}/github-sync/${direction}`,
-        { body: direction === 'push' ? { message } : {} }
+        {
+          body:
+            direction === 'push'
+              ? { message, paths: [...selectedChanges] }
+              : {},
+        }
       )
       setNotice(
         direction === 'push' && result.changed === false
@@ -662,6 +705,83 @@ export default function GitSyncPanel() {
               Update folder
             </OLButton>
           </div>
+          <section className="github-sync-changes">
+            <div className="github-sync-changes-header">
+              <span>
+                <strong>Changes to commit</strong>
+                <small>
+                  {loadingChanges
+                    ? 'Checking repository…'
+                    : `${changes.length} changed file${
+                        changes.length === 1 ? '' : 's'
+                      }`}
+                </small>
+              </span>
+              <OLButton
+                variant="secondary"
+                size="sm"
+                disabled={busy || loadingChanges}
+                onClick={loadChanges}
+              >
+                Refresh
+              </OLButton>
+            </div>
+            {changes.length > 0 ? (
+              <>
+                <label className="github-sync-change-select-all">
+                  <input
+                    type="checkbox"
+                    checked={
+                      changes.length > 0 &&
+                      selectedChanges.size === changes.length
+                    }
+                    onChange={event =>
+                      setSelectedChanges(
+                        event.target.checked
+                          ? new Set(changes.map(change => change.path))
+                          : new Set()
+                      )
+                    }
+                  />
+                  Select all
+                </label>
+                <div className="github-sync-change-list">
+                  {changes.map(change => (
+                    <label
+                      className="github-sync-change"
+                      key={`${change.status}:${change.path}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedChanges.has(change.path)}
+                        onChange={event => {
+                          setSelectedChanges(current => {
+                            const next = new Set(current)
+                            if (event.target.checked) {
+                              next.add(change.path)
+                            } else {
+                              next.delete(change.path)
+                            }
+                            return next
+                          })
+                        }}
+                      />
+                      <span
+                        className={`github-sync-change-status github-sync-change-status-${change.status}`}
+                      >
+                        {change.status[0].toUpperCase()}
+                      </span>
+                      <code title={change.path}>{change.path}</code>
+                    </label>
+                  ))}
+                </div>
+              </>
+            ) : loadingChanges ? null : (
+              <p className="text-muted mb-0">
+                Project and repository are up to date.
+              </p>
+            )}
+          </section>
           <label className="form-label" htmlFor="github-commit-message">
             Commit message
           </label>
@@ -675,7 +795,7 @@ export default function GitSyncPanel() {
           <div className="github-sync-actions">
             <OLButton
               variant="primary"
-              disabled={busy}
+              disabled={busy || loadingChanges || selectedChanges.size === 0}
               isLoading={busy}
               onClick={() => sync('push')}
             >

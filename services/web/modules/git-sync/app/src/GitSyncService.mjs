@@ -264,6 +264,59 @@ async function exportProject(projectId, repositoryDir, syncPath) {
   }
 }
 
+function parseGitStatus(stdout, syncPath) {
+  const prefix = syncPath ? `${normalizeSyncPath(syncPath)}/` : ''
+  const changes = []
+  for (const record of stdout.split('\0')) {
+    if (!record) continue
+    const code = record.slice(0, 2)
+    const repositoryPath = record.slice(3)
+    if (prefix && !repositoryPath.startsWith(prefix)) continue
+    const filePath = prefix
+      ? repositoryPath.slice(prefix.length)
+      : repositoryPath
+    if (!filePath) continue
+    const status =
+      code === '??' || code.includes('A')
+        ? 'added'
+        : code.includes('D')
+          ? 'deleted'
+          : 'modified'
+    changes.push({ path: filePath, status })
+  }
+  return changes.sort((a, b) => a.path.localeCompare(b.path))
+}
+
+async function listProjectChanges(repositoryDir, syncPath) {
+  const pathspec = normalizeSyncPath(syncPath) || '.'
+  const { stdout } = await git(
+    [
+      'status',
+      '--porcelain=v1',
+      '-z',
+      '--untracked-files=all',
+      '--no-renames',
+      '--',
+      pathspec,
+    ],
+    repositoryDir
+  )
+  return parseGitStatus(stdout, syncPath)
+}
+
+function repositoryPathForChange(syncPath, filePath) {
+  const normalizedFilePath = filePath.replace(/^\/+/, '')
+  if (
+    !normalizedFilePath ||
+    normalizedFilePath.split('/').some(part => !part || part === '..')
+  ) {
+    throw new Error(`Invalid selected Git path: ${filePath}`)
+  }
+  return normalizeSyncPath(syncPath)
+    ? path.posix.join(normalizeSyncPath(syncPath), normalizedFilePath)
+    : normalizedFilePath
+}
+
 async function withRepository(link, token, callback) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'overleaf-github-'))
   try {
@@ -287,18 +340,61 @@ export async function pullProject(link, token, userId) {
   })
 }
 
-export async function pushProject(link, token, user) {
+export async function getProjectChanges(link, token) {
+  return await withRepository(link, token, async repositoryDir => {
+    await exportProject(
+      link.projectId.toString(),
+      repositoryDir,
+      link.syncPath || ''
+    )
+    return await listProjectChanges(repositoryDir, link.syncPath || '')
+  })
+}
+
+export async function pushProject(link, token, user, options = {}) {
   return await withRepository(link, token, async (repositoryDir, authEnv) => {
     await exportProject(
       link.projectId.toString(),
       repositoryDir,
       link.syncPath || ''
     )
+    const changes = await listProjectChanges(
+      repositoryDir,
+      link.syncPath || ''
+    )
+    const availablePaths = new Set(changes.map(change => change.path))
+    const selectedPaths =
+      options.paths === undefined
+        ? changes.map(change => change.path)
+        : Array.isArray(options.paths)
+          ? [...new Set(options.paths)]
+          : []
+    if (
+      selectedPaths.length > MAX_FILES ||
+      selectedPaths.some(
+        filePath =>
+          typeof filePath !== 'string' || !availablePaths.has(filePath)
+      )
+    ) {
+      throw new Error('One or more selected Git changes are invalid')
+    }
     await git(['config', 'user.name', user.name || user.email], repositoryDir)
     await git(['config', 'user.email', user.email], repositoryDir)
-    await git(['add', '--all'], repositoryDir)
-    const { stdout: status } = await git(['status', '--porcelain'], repositoryDir)
-    if (!status.trim()) {
+    for (let index = 0; index < selectedPaths.length; index += 100) {
+      const batch = selectedPaths
+        .slice(index, index + 100)
+        .map(filePath =>
+          repositoryPathForChange(link.syncPath || '', filePath)
+        )
+      await git(['add', '--all', '--', ...batch], repositoryDir, {
+        GIT_LITERAL_PATHSPECS: '1',
+      })
+    }
+    const { stdout: stagedPaths } = await git(
+      ['diff', '--cached', '--name-only'],
+      repositoryDir
+    )
+    if (!stagedPaths.trim()) {
       const { stdout } = await git(['rev-parse', 'HEAD'], repositoryDir)
       return { commit: stdout.trim(), changed: false }
     }
