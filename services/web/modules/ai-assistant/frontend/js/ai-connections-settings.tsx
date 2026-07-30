@@ -94,6 +94,33 @@ export default function AiConnectionsSettings() {
     load()
   }, [load])
 
+  useEffect(() => {
+    if (!loginCode) return
+    const interval = window.setInterval(async () => {
+      try {
+        const result = await getJSON<{ status: string; message?: string }>(
+          `/api/ai/codex/login/${encodeURIComponent(loginCode.loginId)}`
+        )
+        if (result.status === 'completed') {
+          window.clearInterval(interval)
+          setLoginCode(undefined)
+          await load()
+        } else if (result.status === 'failed') {
+          window.clearInterval(interval)
+          setLoginCode(undefined)
+          setError(result.message || 'ChatGPT sign-in failed.')
+        } else if (result.status === 'expired') {
+          window.clearInterval(interval)
+          setLoginCode(undefined)
+          setError('The ChatGPT sign-in request expired. Please try again.')
+        }
+      } catch {
+        // A temporary proxy failure must not cancel an active device login.
+      }
+    }, 2000)
+    return () => window.clearInterval(interval)
+  }, [loginCode, load])
+
   if (!enabled) return null
   if (loading) {
     return (
@@ -193,33 +220,6 @@ export default function AiConnectionsSettings() {
       setBusy(false)
     }
   }
-
-  useEffect(() => {
-    if (!loginCode) return
-    const interval = window.setInterval(async () => {
-      try {
-        const result = await getJSON<{ status: string; message?: string }>(
-          `/api/ai/codex/login/${encodeURIComponent(loginCode.loginId)}`
-        )
-        if (result.status === 'completed') {
-          window.clearInterval(interval)
-          setLoginCode(undefined)
-          await load()
-        } else if (result.status === 'failed') {
-          window.clearInterval(interval)
-          setLoginCode(undefined)
-          setError(result.message || 'ChatGPT sign-in failed.')
-        } else if (result.status === 'expired') {
-          window.clearInterval(interval)
-          setLoginCode(undefined)
-          setError('The ChatGPT sign-in request expired. Please try again.')
-        }
-      } catch {
-        // A temporary proxy failure must not cancel an active device login.
-      }
-    }, 2000)
-    return () => window.clearInterval(interval)
-  }, [loginCode, load])
 
   const disconnectCodex = async () => {
     if (!window.confirm('Disconnect Codex from this account?')) return
