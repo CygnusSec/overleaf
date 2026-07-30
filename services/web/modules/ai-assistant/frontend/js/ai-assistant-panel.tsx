@@ -56,7 +56,11 @@ export default function AiAssistantPanel() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [proposal, setProposal] = useState<{
     explanation: string
-    replacement: string | null
+    edits: Array<{
+      startLine: number
+      endLine: number
+      replacement: string
+    }>
     files: Array<{ name: string; content: string }>
     folders: string[]
     sourceContent: string
@@ -214,7 +218,11 @@ export default function AiAssistantPanel() {
       const result = await postJSON<{
         answer?: string
         explanation?: string
-        replacement?: string | null
+        edits?: Array<{
+          startLine: number
+          endLine: number
+          replacement: string
+        }>
         files?: Array<{ name: string; content: string }>
         folders?: string[]
         messages?: ChatMessage[]
@@ -246,8 +254,7 @@ export default function AiAssistantPanel() {
       if (mode === 'edit') {
         setProposal({
           explanation: result.explanation || '',
-          replacement:
-            typeof result.replacement === 'string' ? result.replacement : null,
+          edits: result.edits || [],
           files: result.files || [],
           folders: result.folders || [],
           sourceContent: content,
@@ -336,9 +343,27 @@ export default function AiAssistantPanel() {
       setProposal(undefined)
       return
     }
+    const edits = [...proposal.edits].sort(
+      (left, right) => left.startLine - right.startLine
+    )
+    const invalidEdit = edits.some(
+      (edit, index) =>
+        !Number.isSafeInteger(edit.startLine) ||
+        !Number.isSafeInteger(edit.endLine) ||
+        edit.startLine < 1 ||
+        edit.endLine < edit.startLine ||
+        edit.endLine > view.state.doc.lines ||
+        (index > 0 && edit.startLine <= edits[index - 1].endLine)
+    )
+    if (invalidEdit) {
+      setError(
+        'The AI returned an invalid or overlapping line change. No changes were applied.'
+      )
+      return
+    }
     if (
       !window.confirm(
-        `Apply this AI proposal? It may update the current file and create ${proposal.files.length} file(s) and ${proposal.folders.length} folder(s).`
+        `Apply ${edits.length} line edit(s), create ${proposal.files.length} file(s), and create ${proposal.folders.length} folder(s)?`
       )
     ) {
       return
@@ -351,13 +376,13 @@ export default function AiAssistantPanel() {
           body: { files: proposal.files, folders: proposal.folders },
         })
       }
-      if (typeof proposal.replacement === 'string') {
+      if (edits.length) {
         view.dispatch({
-          changes: {
-            from: 0,
-            to: current.length,
-            insert: proposal.replacement,
-          },
+          changes: edits.map(edit => ({
+            from: view.state.doc.line(edit.startLine).from,
+            to: view.state.doc.line(edit.endLine).to,
+            insert: edit.replacement,
+          })),
         })
       }
       setProposal(undefined)
@@ -429,12 +454,26 @@ export default function AiAssistantPanel() {
                 </div>
                 <span className="ai-proposal-count">Review</span>
               </div>
-              {typeof proposal.replacement === 'string' ? (
+              {proposal.edits.length ? (
                 <details className="ai-proposal-details">
-                  <summary>Review current file update</summary>
-                  <pre className="ai-proposal-code">
-                    {proposal.replacement}
-                  </pre>
+                  <summary>
+                    Review line changes ({proposal.edits.length})
+                  </summary>
+                  {proposal.edits.map((edit, index) => (
+                    <div
+                      className="ai-proposal-line-edit"
+                      key={`${edit.startLine}-${edit.endLine}-${index}`}
+                    >
+                      <strong>
+                        {edit.startLine === edit.endLine
+                          ? `Line ${edit.startLine}`
+                          : `Lines ${edit.startLine}-${edit.endLine}`}
+                      </strong>
+                      <pre className="ai-proposal-code">
+                        {edit.replacement || '(remove line content)'}
+                      </pre>
+                    </div>
+                  ))}
                 </details>
               ) : null}
               {proposal.files.length || proposal.folders.length ? (
@@ -473,7 +512,7 @@ export default function AiAssistantPanel() {
                   disabled={
                     !canWrite ||
                     busy ||
-                    (proposal.replacement === null &&
+                    (!proposal.edits.length &&
                       !proposal.files.length &&
                       !proposal.folders.length)
                   }

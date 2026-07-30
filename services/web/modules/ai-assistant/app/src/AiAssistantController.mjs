@@ -456,10 +456,22 @@ export async function run(req, res) {
   } catch (error) {
     return sendProviderError(res, error)
   }
+  const editSize = Array.isArray(result.edits)
+    ? result.edits.reduce(
+        (size, edit) => size + String(edit.replacement || '').length,
+        0
+      )
+    : 0
+  const documentLineCount = content.split('\n').length
   if (
-    typeof result.replacement === 'string' &&
-    result.replacement.length > (Settings.aiMaxDocumentChars || 200000)
+    Array.isArray(result.edits) &&
+    result.edits.some(edit => edit.endLine > documentLineCount)
   ) {
+    return res.status(422).json({
+      message: 'AI returned a line change outside the current document',
+    })
+  }
+  if (editSize > (Settings.aiMaxDocumentChars || 200000)) {
     return res.status(422).json({ message: 'AI response is too large' })
   }
   if (personal) {

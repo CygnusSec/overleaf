@@ -231,6 +231,20 @@
     white-space: pre-wrap;
   }
 
+  .ai-proposal-line-edit {
+    margin-top: var(--spacing-03);
+
+    & + & {
+      padding-top: var(--spacing-03);
+      border-top: 1px solid var(--border-divider-themed);
+    }
+
+    strong {
+      display: block;
+      margin-bottom: var(--spacing-02);
+    }
+  }
+
   .ai-proposal-actions {
     display: flex;
     flex-wrap: wrap;

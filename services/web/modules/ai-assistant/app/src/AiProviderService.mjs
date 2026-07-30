@@ -97,21 +97,29 @@ export function systemPrompt(mode) {
   if (mode === 'ask') return `${base} Answer the user clearly.`
   return `${base}
 Return JSON only, with this exact shape:
-{"explanation":"short explanation","replacement":"complete replacement text or null when unchanged","files":[{"name":"new-file.tex","content":"complete file content"}],"folders":["new-folder"]}
-The replacement must contain the complete revised current file, without Markdown
-fences. Use files to propose new project files and folders to propose new
-top-level folders. File and folder names must be clean base names without path
-separators. Do not delete or overwrite existing project files.`
+{"explanation":"short explanation","edits":[{"startLine":3,"endLine":3,"replacement":"replacement text for exactly these lines"}],"files":[{"name":"new-file.tex","content":"complete file content"}],"folders":["new-folder"]}
+Line numbers are 1-based and inclusive. Each edit must cover only the smallest
+line range required by the request. Never return the complete current document
+as an edit, and never modify unrelated lines. The replacement is plain text for
+exactly that line range, without Markdown fences or the read-only line-number
+prefixes shown in the user prompt. Return an empty edits array when the current
+file does not need a change. Use files to propose new project files and folders
+to propose new top-level folders. File and folder names must be clean base names
+without path separators. Do not delete or overwrite existing project files.`
 }
 
 export function userPrompt({ prompt, content, selection, mode }) {
+  const numberedContent = content
+    .split('\n')
+    .map((line, index) => `${index + 1}: ${line}`)
+    .join('\n')
   return `Request:
 ${prompt}
 
 Mode: ${mode}
 ${selection ? `Selected text:\n${selection}\n` : ''}
-Current LaTeX:
-${content}`
+Current LaTeX with read-only line-number prefixes:
+${numberedContent}`
 }
 
 export async function runProvider({
@@ -219,15 +227,35 @@ export function parseAssistantResponse(text, mode) {
   try {
     const parsed = JSON.parse(normalized)
     if (
-      parsed.replacement !== null &&
-      typeof parsed.replacement !== 'string'
+      !Array.isArray(parsed.edits) ||
+      parsed.edits.length > 50 ||
+      parsed.edits.some(
+        edit =>
+          !edit ||
+          !Number.isSafeInteger(edit.startLine) ||
+          !Number.isSafeInteger(edit.endLine) ||
+          edit.startLine < 1 ||
+          edit.endLine < edit.startLine ||
+          typeof edit.replacement !== 'string'
+      )
     ) {
-      throw new Error()
+      throw new Error('AI returned malformed edits')
+    }
+    const edits = parsed.edits
+      .map(edit => ({
+        startLine: edit.startLine,
+        endLine: edit.endLine,
+        replacement: edit.replacement,
+      }))
+      .sort((left, right) => left.startLine - right.startLine)
+    for (let index = 1; index < edits.length; index++) {
+      if (edits[index].startLine <= edits[index - 1].endLine) {
+        throw new Error('AI returned overlapping edits')
+      }
     }
     return {
       explanation: String(parsed.explanation || ''),
-      replacement:
-        typeof parsed.replacement === 'string' ? parsed.replacement : null,
+      edits,
       files: Array.isArray(parsed.files)
         ? parsed.files
             .filter(
