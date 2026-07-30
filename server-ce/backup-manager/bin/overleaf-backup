@@ -21,7 +21,7 @@ chown "$WEB_UID:$WEB_GID" "$BACKUP_ROOT" "$BACKUP_ROOT/.requests"
 chmod 2770 "$BACKUP_ROOT" "$BACKUP_ROOT/.requests"
 
 create_backup() {
-  local stamp work archive plain_archive passphrase_file free_kb required_kb
+  local stamp work archive plain_archive passphrase_file free_kb required_kb gnupg_home
   if [[ -z "$ENCRYPTION_PASSPHRASE" || "$ENCRYPTION_PASSPHRASE" == replace-with-* ]]; then
     echo "BACKUP_ENCRYPTION_PASSPHRASE is required" >&2
     return 1
@@ -37,7 +37,11 @@ create_backup() {
   archive="$BACKUP_ROOT/overleaf-backup-${stamp}.tar.gz.gpg"
   plain_archive="$work/overleaf-backup-${stamp}.tar.gz"
   passphrase_file="$work/.passphrase"
-  trap 'rm -f "$BACKUP_ROOT/.maintenance"; rm -rf "$work"' EXIT INT TERM
+  gnupg_home="$work/.gnupg"
+  mkdir -m 700 "$gnupg_home"
+  trap \
+    "rm -f $(printf '%q' "$BACKUP_ROOT/.maintenance"); rm -rf $(printf '%q' "$work")" \
+    EXIT INT TERM
 
   free_kb="$(df -Pk "$BACKUP_ROOT" | awk 'NR == 2 {print $4}')"
   required_kb="$((MIN_FREE_GB * 1024 * 1024))"
@@ -102,7 +106,7 @@ create_backup() {
 
   printf '%s' "$ENCRYPTION_PASSPHRASE" >"$passphrase_file"
   chmod 600 "$passphrase_file"
-  gpg \
+  GNUPGHOME="$gnupg_home" gpg \
     --batch \
     --yes \
     --pinentry-mode loopback \
@@ -120,7 +124,7 @@ create_backup() {
 }
 
 restore_backup() {
-  local archive="${1:-}" confirmation="${2:-}" work plain_archive passphrase_file
+  local archive="${1:-}" confirmation="${2:-}" work plain_archive passphrase_file gnupg_home
   if [[ -z "$archive" || "$confirmation" != "--confirm-data-loss" ]]; then
     echo "Usage: overleaf-backup restore /backups/<archive>.tar.gz.gpg --confirm-data-loss" >&2
     exit 2
@@ -140,12 +144,14 @@ restore_backup() {
   fi
 
   work="$(mktemp -d "$BACKUP_ROOT/.restore-XXXXXX")"
-  trap 'rm -rf "$work"' EXIT INT TERM
+  trap "rm -rf $(printf '%q' "$work")" EXIT INT TERM
   plain_archive="$work/backup.tar.gz"
   passphrase_file="$work/.passphrase"
+  gnupg_home="$work/.gnupg"
+  mkdir -m 700 "$gnupg_home"
   printf '%s' "$ENCRYPTION_PASSPHRASE" >"$passphrase_file"
   chmod 600 "$passphrase_file"
-  gpg \
+  GNUPGHOME="$gnupg_home" gpg \
     --batch \
     --yes \
     --pinentry-mode loopback \
