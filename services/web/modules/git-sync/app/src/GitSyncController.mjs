@@ -1,4 +1,5 @@
 import crypto from 'node:crypto'
+import logger from '@overleaf/logger'
 import Settings from '@overleaf/settings'
 import SessionManager from '../../../../app/src/Features/Authentication/SessionManager.mjs'
 import AuthorizationManager from '../../../../app/src/Features/Authorization/AuthorizationManager.mjs'
@@ -26,6 +27,19 @@ import {
 } from './GitSyncService.mjs'
 
 const activeProjects = new Set()
+
+function gitSyncErrorMessage(error) {
+  if (error.code === 'ENOENT') {
+    return 'Git is not installed in the ShareLaTeX image'
+  }
+  const stderr =
+    typeof error.stderr === 'string'
+      ? error.stderr.trim()
+      : Buffer.isBuffer(error.stderr)
+        ? error.stderr.toString('utf8').trim()
+        : ''
+  return (stderr || error.message || 'GitHub sync failed').slice(0, 4000)
+}
 
 function isValidBranchName(branch) {
   return (
@@ -456,11 +470,19 @@ async function runSync(req, res, direction) {
     await link.save()
     res.json({ commit, changed, syncedAt: link.lastSyncedAt })
   } catch (error) {
-    res.status(502).json({
-      message:
-        error.code === 'ENOENT'
-          ? 'Git is not installed in the ShareLaTeX image'
-          : error.message || 'GitHub sync failed',
+    logger.error(
+      {
+        err: error,
+        projectId,
+        direction,
+        repositoryFullName: link.repositoryFullName,
+        branch: link.branch,
+        syncPath: link.syncPath || '',
+      },
+      'GitHub sync failed'
+    )
+    res.status(error.code === 'ENOENT' ? 503 : 422).json({
+      message: gitSyncErrorMessage(error),
     })
   } finally {
     activeProjects.delete(projectId)
