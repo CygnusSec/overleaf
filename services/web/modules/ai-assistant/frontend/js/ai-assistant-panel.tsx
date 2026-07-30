@@ -5,7 +5,6 @@ import { useEditorManagerContext } from '@/features/ide-react/context/editor-man
 import { useEditorViewContext } from '@/features/ide-react/context/editor-view-context'
 import OLButton from '@/shared/components/ol/ol-button'
 import OLNotification from '@/shared/components/ol/ol-notification'
-import OLFormControl from '@/shared/components/ol/ol-form-control'
 import OLFormSelect from '@/shared/components/ol/ol-form-select'
 import getMeta from '@/utils/meta'
 import '../stylesheets/ai-assistant.scss'

@@ -250,7 +250,12 @@ export async function saveSystemProvider(req, res) {
   if (!name || !baseUrl || !model) {
     return res.status(422).send('Name, endpoint and model are required')
   }
-  const parsed = new URL(baseUrl)
+  let parsed
+  try {
+    parsed = new URL(baseUrl)
+  } catch {
+    return res.status(422).send('Invalid endpoint')
+  }
   if (
     !['http:', 'https:'].includes(parsed.protocol) ||
     parsed.username ||

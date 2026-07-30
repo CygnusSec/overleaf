@@ -24,9 +24,9 @@ AI_PROVIDERS_CONFIG=[{"id":"openai","name":"OpenAI","enabled":true,"adapter":"op
 ```
 
 `AI_PROVIDERS_CONFIG` is only a catalog. It must never contain user API keys.
-Supported adapters are `openai`, `openai-compatible`, `anthropic`, and
-`gemini`. New providers that implement the OpenAI chat-completions protocol can
-be added without changing application code.
+Supported adapters are `openai`, `openai-compatible`, `anthropic`, `gemini`,
+and `ollama`. New providers that implement the OpenAI chat-completions protocol
+can be added without changing application code.
 
 Keep `AI_CREDENTIAL_ENCRYPTION_KEY` outside the database and include it in the
 server's protected backup procedure. Existing credentials cannot be decrypted
