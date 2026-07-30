@@ -10,6 +10,7 @@ import {
   FetchError,
   getJSON,
   postJSON,
+  putJSON,
 } from '@/infrastructure/fetch-json'
 import { useIdeReactContext } from '@/features/ide-react/context/ide-react-context'
 import { useEditorManagerContext } from '@/features/ide-react/context/editor-manager-context'
@@ -25,12 +26,14 @@ type Connection = {
   id: string
   displayName: string
   model: string
+  models: string[]
   shared?: boolean
 }
 type CodexStatus = {
   connected: boolean
   accountLabel?: string | null
   model?: string
+  models?: string[]
 }
 type ChatMessage = {
   id: string
@@ -47,6 +50,7 @@ export default function AiAssistantPanel() {
   const { view } = useEditorViewContext()
   const [connections, setConnections] = useState<Connection[]>([])
   const [connectionId, setConnectionId] = useState('')
+  const [model, setModel] = useState('')
   const [mode, setMode] = useState<'ask' | 'edit'>('ask')
   const [prompt, setPrompt] = useState('')
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -62,6 +66,7 @@ export default function AiAssistantPanel() {
   const [error, setError] = useState<string>()
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const loadRequestRef = useRef(0)
+  const modelRequestRef = useRef(0)
   const projectIdRef = useRef(projectId)
   const canWrite =
     permissionsLevel === 'owner' || permissionsLevel === 'readAndWrite'
@@ -91,16 +96,19 @@ export default function AiAssistantPanel() {
               id: 'codex',
               displayName: 'Codex',
               model: result.codex.model || 'ChatGPT',
+              models: result.codex.models || [result.codex.model || 'ChatGPT'],
             },
           ]
         : []
-      const items = [...codex, ...result.shared, ...result.personal]
-      setConnections(items)
-      setConnectionId(current =>
-        items.some(item => item.id === current)
-          ? current
-          : items[0]?.id || ''
+      const items = [...codex, ...result.shared, ...result.personal].map(
+        item => ({
+          ...item,
+          models: item.models?.length ? item.models : [item.model],
+        })
       )
+      setConnections(items)
+      setConnectionId(items[0]?.id || '')
+      setModel(items[0]?.model || '')
       try {
         const conversation = await getJSON<{ messages: ChatMessage[] }>(
           `/project/${projectId}/ai/conversation`
@@ -207,7 +215,7 @@ export default function AiAssistantPanel() {
         folders?: string[]
         messages?: ChatMessage[]
       }>(`/project/${projectId}/ai/run`, {
-        body: { connectionId, mode, prompt, content, selection },
+        body: { connectionId, model, mode, prompt, content, selection },
       })
       if (projectIdRef.current !== requestProjectId) return
       const newMessages = result.messages || []
@@ -280,6 +288,36 @@ export default function AiAssistantPanel() {
       )
     } finally {
       setBusy(false)
+    }
+  }
+
+  const changeModel = async (nextModel: string) => {
+    const requestId = ++modelRequestRef.current
+    const previousModel = model
+    setModel(nextModel)
+    setError(undefined)
+    if (connectionId !== 'codex') return
+    try {
+      const status = await putJSON<CodexStatus>('/api/ai/codex', {
+        body: { model: nextModel },
+      })
+      if (requestId !== modelRequestRef.current) return
+      setModel(status.model || nextModel)
+      setConnections(current =>
+        current.map(item =>
+          item.id === 'codex'
+            ? { ...item, model: status.model || nextModel }
+            : item
+        )
+      )
+    } catch (err) {
+      if (requestId !== modelRequestRef.current) return
+      setModel(previousModel)
+      setError(
+        err instanceof FetchError
+          ? err.getUserFacingMessage()
+          : 'Could not change the Codex model.'
+      )
     }
   }
 
@@ -481,29 +519,58 @@ export default function AiAssistantPanel() {
             <div className="ai-composer-options">
               <label className="ai-compact-select">
                 <MaterialIcon type={mode === 'edit' ? 'edit' : 'chat'} />
-                <span className="visually-hidden">Agent</span>
+                <span className="visually-hidden">Mode</span>
                 <select
                   value={mode}
                   onChange={event =>
                     setMode(event.target.value as 'ask' | 'edit')
                   }
-                  aria-label="AI agent"
+                  aria-label="AI mode"
+                  disabled={busy}
                 >
                   <option value="ask">Ask</option>
                   <option value="edit">Edit</option>
+                </select>
+              </label>
+              <label className="ai-compact-select ai-agent-select">
+                <MaterialIcon type="smart_toy" />
+                <span className="visually-hidden">AI agent</span>
+                <select
+                  value={connectionId}
+                  onChange={event => {
+                    const next = connections.find(
+                      item => item.id === event.target.value
+                    )
+                    if (!next) return
+                    modelRequestRef.current += 1
+                    setConnectionId(next.id)
+                    setModel(next.model)
+                  }}
+                  aria-label="AI agent"
+                  disabled={busy}
+                >
+                  {connections.map(item => (
+                    <option value={item.id} key={item.id}>
+                      {item.shared ? 'Shared · ' : ''}
+                      {item.displayName}
+                    </option>
+                  ))}
                 </select>
               </label>
               <label className="ai-compact-select ai-model-select">
                 <MaterialIcon type="bolt" />
                 <span className="visually-hidden">Model</span>
                 <select
-                  value={connectionId}
-                  onChange={event => setConnectionId(event.target.value)}
+                  value={model}
+                  onChange={event => changeModel(event.target.value)}
                   aria-label="AI model"
+                  disabled={busy}
                 >
-                  {connections.map(item => (
-                    <option value={item.id} key={item.id}>
-                      {item.displayName} · {item.model}
+                  {(connections.find(item => item.id === connectionId)
+                    ?.models || [model]
+                  ).map(item => (
+                    <option value={item} key={item}>
+                      {item}
                     </option>
                   ))}
                 </select>

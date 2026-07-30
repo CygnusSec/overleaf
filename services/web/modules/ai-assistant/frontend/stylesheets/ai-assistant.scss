@@ -370,9 +370,14 @@
     }
   }
 
+  .ai-agent-select {
+    flex: 1 1 auto;
+    max-width: 130px;
+  }
+
   .ai-model-select {
     flex: 1 1 auto;
-    max-width: 190px;
+    max-width: 150px;
   }
 
   .ai-send-button {

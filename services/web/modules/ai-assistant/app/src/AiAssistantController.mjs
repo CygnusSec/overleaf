@@ -43,12 +43,13 @@ function requireEnabled(res) {
   return false
 }
 
-function publicConnection(item) {
+function publicConnection(item, models = []) {
   return {
     id: item._id.toString(),
     providerId: item.providerId,
     displayName: item.displayName,
     model: item.model,
+    models: Array.from(new Set([item.model, ...models].filter(Boolean))),
     enabled: item.enabled,
     lastUsedAt: item.lastUsedAt,
   }
@@ -177,11 +178,14 @@ export async function listConnections(req, res) {
   res.json({
     personal: personal
       .filter(item => enabledProviderIds.has(item.providerId))
-      .map(publicConnection),
+      .map(item =>
+        publicConnection(item, getCatalogProvider(item.providerId)?.models)
+      ),
     shared: shared.map(item => ({
       id: `system:${item._id}`,
       displayName: item.name,
       model: item.model,
+      models: [item.model],
       shared: true,
     })),
     codex,
@@ -336,6 +340,7 @@ export async function run(req, res) {
   const content = String(req.body.content || '')
   const selection = String(req.body.selection || '')
   const prompt = String(req.body.prompt || '').trim()
+  const requestedModel = String(req.body.model || '').trim().slice(0, 150)
   const mode = req.body.mode === 'ask' ? 'ask' : 'edit'
   if (
     !prompt ||
@@ -356,7 +361,10 @@ export async function run(req, res) {
         message: 'Connect Codex with ChatGPT in Account settings first',
       })
     }
-    runtime = { model: status.model }
+    if (requestedModel && !status.models.includes(requestedModel)) {
+      return res.status(422).json({ message: 'Invalid Codex model' })
+    }
+    runtime = { model: requestedModel || status.model }
   } else if (connectionId.startsWith('system:')) {
     const id = req.body.connectionId.slice(7)
     if (!validObjectId(id)) {
@@ -364,6 +372,9 @@ export async function run(req, res) {
     }
     const shared = await AiSystemProvider.findOne({ _id: id, enabled: true })
     if (!shared) return res.status(404).json({ message: 'AI provider not found' })
+    if (requestedModel && requestedModel !== shared.model) {
+      return res.status(422).json({ message: 'Invalid AI model' })
+    }
     runtime = {
       adapter: shared.adapter,
       baseUrl: shared.baseUrl.replace(/\/$/, ''),
@@ -388,11 +399,17 @@ export async function run(req, res) {
     if (!provider) {
       return res.status(409).json({ message: 'AI provider is disabled' })
     }
+    const allowedModels = Array.from(
+      new Set([personal.model, ...(provider.models || [])].filter(Boolean))
+    )
+    if (requestedModel && !allowedModels.includes(requestedModel)) {
+      return res.status(422).json({ message: 'Invalid AI model' })
+    }
     runtime = {
       adapter: provider.adapter,
       baseUrl: provider.baseUrl,
       apiKey: decryptCredential(personal.credential),
-      model: personal.model,
+      model: requestedModel || personal.model,
     }
   }
   let result
