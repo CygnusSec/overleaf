@@ -83,6 +83,34 @@ function redirectWithMessage(res, type, message) {
   res.redirect(`/admin/backups?${type}=${encodeURIComponent(message)}`)
 }
 
+function localIsoTimestamp() {
+  const date = new Date()
+  const offsetMinutes = -date.getTimezoneOffset()
+  const sign = offsetMinutes >= 0 ? '+' : '-'
+  const absoluteOffset = Math.abs(offsetMinutes)
+  const hours = String(Math.floor(absoluteOffset / 60)).padStart(2, '0')
+  const minutes = String(absoluteOffset % 60).padStart(2, '0')
+  const localTime = new Date(date.getTime() + offsetMinutes * 60_000)
+    .toISOString()
+    .slice(0, -1)
+  return `${localTime}${sign}${hours}:${minutes}`
+}
+
+function formatHostTimestamp(value) {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat('en-GB', {
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    timeZoneName: 'short',
+  }).format(date)
+}
+
 async function writeStatus(status) {
   const target = Path.join(storagePath(), 'last-run.json')
   const temporary = `${target}.${crypto.randomUUID()}.tmp`
@@ -103,6 +131,7 @@ async function listArchives() {
       name: entry.name,
       size: stat.size,
       createdAt: stat.mtime,
+      createdAtDisplay: formatHostTimestamp(stat.mtime),
       hasChecksum: await fs
         .access(Path.join(storagePath(), `${entry.name}.sha256`))
         .then(() => true)
@@ -129,6 +158,9 @@ async function index(req, res) {
       schedule,
       lastRun,
       currentRunLog,
+      lastRunDisplayTime: formatHostTimestamp(
+        lastRun?.finishedAt || lastRun?.startedAt || lastRun?.requestedAt
+      ),
       queueStalled:
         lastRun?.status === 'queued' &&
         Date.now() - Date.parse(lastRun.requestedAt) > 60_000,
@@ -180,7 +212,7 @@ async function create(req, res) {
     })
     await writeStatus({
         status: 'queued',
-        requestedAt: new Date().toISOString(),
+        requestedAt: localIsoTimestamp(),
         message: 'Waiting for the backup service to start this request.',
     })
     await fs.rename(
@@ -226,7 +258,7 @@ async function cancel(req, res) {
   )
   await writeStatus({
     status: 'cancelled',
-    finishedAt: new Date().toISOString(),
+    finishedAt: localIsoTimestamp(),
     message: 'Queued backup cancelled by an administrator.',
   })
   return redirectWithMessage(res, 'notice', 'Queued backup cancelled')

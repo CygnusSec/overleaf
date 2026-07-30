@@ -63,7 +63,7 @@ run_backup() {
   rm -f "$CANCEL_REQUEST"
   jq -n \
     --arg status "running" \
-    --arg startedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    --arg startedAt "$(date --iso-8601=seconds)" \
     --arg message "Creating encrypted backup. Large installations can take several minutes." \
     '{status: $status, startedAt: $startedAt, message: $message}' \
     | write_shared_json "$STATUS"
@@ -96,7 +96,7 @@ run_backup() {
   output="$(tail -c 32768 "$RUN_LOG")"
   jq -n \
     --arg status "$status" \
-    --arg finishedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    --arg finishedAt "$(date --iso-8601=seconds)" \
     --arg message "$output" \
     '{status: $status, finishedAt: $finishedAt, message: $message}' \
     | write_shared_json "$STATUS"

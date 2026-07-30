@@ -25,12 +25,13 @@ block content
 					if lastRun
 						.alert(class=lastRun.status === 'success' ? 'alert-success' : lastRun.status === 'failed' ? 'alert-danger' : 'alert-info')
 							strong Backup status: #{lastRun.status}
-							if lastRun.finishedAt
-								|  at #{lastRun.finishedAt}.
-							else if lastRun.startedAt
-								|  since #{lastRun.startedAt}.
-							else if lastRun.requestedAt
-								|  requested at #{lastRun.requestedAt}.
+							if lastRunDisplayTime
+								if lastRun.finishedAt
+									|  at #{lastRunDisplayTime}.
+								else if lastRun.startedAt
+									|  since #{lastRunDisplayTime}.
+								else
+									|  requested at #{lastRunDisplayTime}.
 							if lastRun.message
 								details(open=lastRun.status === 'failed' || lastRun.status === 'running')
 									summary= lastRun.status === 'running' ? 'Live backup log' : 'Backup details'
@@ -130,7 +131,7 @@ block content
 										tr
 											td
 												code= archive.name
-											td= archive.createdAt.toISOString()
+											td= archive.createdAtDisplay
 											td= (archive.size / 1024 / 1024).toFixed(1) + ' MB'
 											td= archive.hasChecksum ? 'SHA-256' : 'Archive only'
 											td
