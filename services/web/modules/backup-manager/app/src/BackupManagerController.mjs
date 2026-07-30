@@ -83,6 +83,15 @@ function redirectWithMessage(res, type, message) {
   res.redirect(`/admin/backups?${type}=${encodeURIComponent(message)}`)
 }
 
+async function writeStatus(status) {
+  const target = Path.join(storagePath(), 'last-run.json')
+  const temporary = `${target}.${crypto.randomUUID()}.tmp`
+  await fs.writeFile(temporary, `${JSON.stringify(status)}\n`, {
+    mode: 0o660,
+  })
+  await fs.rename(temporary, target)
+}
+
 async function listArchives() {
   await fs.mkdir(storagePath(), { recursive: true })
   const entries = await fs.readdir(storagePath(), { withFileTypes: true })
@@ -120,6 +129,9 @@ async function index(req, res) {
       schedule,
       lastRun,
       currentRunLog,
+      queueStalled:
+        lastRun?.status === 'queued' &&
+        Date.now() - Date.parse(lastRun.requestedAt) > 60_000,
       schedulerAvailable,
       enabled: Settings.backupManagerEnabled,
       encryptionConfigured: encryptionConfigured(),
@@ -166,15 +178,11 @@ async function create(req, res) {
       flag: 'wx',
       mode: 0o660,
     })
-    await fs.writeFile(
-      Path.join(storagePath(), 'last-run.json'),
-      `${JSON.stringify({
+    await writeStatus({
         status: 'queued',
         requestedAt: new Date().toISOString(),
         message: 'Waiting for the backup service to start this request.',
-      })}\n`,
-      { mode: 0o660 }
-    )
+    })
     await fs.rename(
       pendingRequest,
       Path.join(requestDirectory, `create-${requestId}`)
@@ -191,6 +199,37 @@ async function create(req, res) {
       `Could not queue backup: ${error.message}`
     )
   }
+}
+
+async function cancel(req, res) {
+  const lastRun = await readLastRun()
+  const requestDirectory = Path.join(storagePath(), '.requests')
+
+  if (lastRun?.status === 'running') {
+    await fs.writeFile(Path.join(storagePath(), '.cancel'), '', {
+      mode: 0o660,
+    })
+    return redirectWithMessage(
+      res,
+      'notice',
+      'Cancellation requested. Waiting for the backup process to stop.'
+    )
+  }
+
+  const entries = await fs.readdir(requestDirectory).catch(() => [])
+  await Promise.all(
+    entries
+      .filter(
+        name => name.startsWith('create-') || name.startsWith('.pending-')
+      )
+      .map(name => fs.unlink(Path.join(requestDirectory, name)).catch(() => {}))
+  )
+  await writeStatus({
+    status: 'cancelled',
+    finishedAt: new Date().toISOString(),
+    message: 'Queued backup cancelled by an administrator.',
+  })
+  return redirectWithMessage(res, 'notice', 'Queued backup cancelled')
 }
 
 async function updateSchedule(req, res) {
@@ -251,6 +290,7 @@ async function uploaded(req, res) {
 export default {
   index,
   create,
+  cancel,
   clearStatus,
   updateSchedule,
   download,

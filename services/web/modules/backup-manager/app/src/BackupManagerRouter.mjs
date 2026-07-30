@@ -43,6 +43,11 @@ export default {
       BackupManagerController.clearStatus
     )
     webRouter.post(
+      '/admin/backups/cancel',
+      admin,
+      BackupManagerController.cancel
+    )
+    webRouter.post(
       '/admin/backups/schedule',
       admin,
       BackupManagerController.updateSchedule

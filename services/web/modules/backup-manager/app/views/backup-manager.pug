@@ -40,6 +40,15 @@ block content
 								form.mt-2(method='post' action='/admin/backups/status/clear')
 									input(name='_csrf' type='hidden' value=csrfToken)
 									button.btn.btn-sm.btn-secondary(type='submit') Clear status
+							else
+								if queueStalled
+									p.text-danger The backup service has not consumed this request after one minute. Check the backup-manager logs or cancel this request.
+								form.mt-2(
+									method='post'
+									action='/admin/backups/cancel'
+								)
+									input(name='_csrf' type='hidden' value=csrfToken)
+									button.btn.btn-sm.btn-danger(type='submit') Cancel backup
 
 					.row
 						.col-md-6
@@ -131,7 +140,6 @@ block content
 												form.d-inline(
 													method='post'
 													action=`/admin/backups/${archive.name}/delete`
-													onsubmit="return confirm('Delete this backup?')"
 												)
 													input(name='_csrf' type='hidden' value=csrfToken)
 													button.btn.btn-sm.btn-danger(type='submit') Delete
@@ -155,11 +163,11 @@ block content
 							| &#10;docker compose up -d
 
 	if lastRun && ['queued', 'running'].includes(lastRun.status)
-		script.
+		script(nonce=scriptNonce).
 			window.setTimeout(() => window.location.replace('/admin/backups'), 5000)
 
 	if notice || error
-		script.
+		script(nonce=scriptNonce).
 			if (window.history && window.history.replaceState) {
 				window.history.replaceState({}, document.title, '/admin/backups')
 			}

@@ -7,6 +7,7 @@ STATE="$BACKUP_ROOT/.scheduler-state"
 REQUESTS="$BACKUP_ROOT/.requests"
 STATUS="$BACKUP_ROOT/last-run.json"
 RUN_LOG="$BACKUP_ROOT/current-run.log"
+CANCEL_REQUEST="$BACKUP_ROOT/.cancel"
 HEARTBEAT="$BACKUP_ROOT/.scheduler-heartbeat"
 WEB_GID="${BACKUP_WEB_GID:-33}"
 mkdir -p "$REQUESTS"
@@ -58,30 +59,40 @@ prune_backups() {
 }
 
 run_backup() {
-  local output status heartbeat_pid
+  local output status backup_pid cancelled
+  rm -f "$CANCEL_REQUEST"
   jq -n \
     --arg status "running" \
     --arg startedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     --arg message "Creating encrypted backup. Large installations can take several minutes." \
     '{status: $status, startedAt: $startedAt, message: $message}' \
     | write_shared_json "$STATUS"
-  (
-    while true; do
-      write_heartbeat
-      sleep 15
-    done
-  ) &
-  heartbeat_pid="$!"
   : >"$RUN_LOG"
   chown "root:$WEB_GID" "$RUN_LOG"
   chmod 640 "$RUN_LOG"
-  if /usr/local/bin/overleaf-backup create >"$RUN_LOG" 2>&1; then
+
+  setsid /usr/local/bin/overleaf-backup create >"$RUN_LOG" 2>&1 &
+  backup_pid="$!"
+  cancelled="false"
+  while kill -0 "$backup_pid" 2>/dev/null; do
+    write_heartbeat
+    if [[ -f "$CANCEL_REQUEST" ]]; then
+      cancelled="true"
+      printf '\nBackup cancelled by an administrator.\n' >>"$RUN_LOG"
+      kill -TERM -- "-$backup_pid" 2>/dev/null || true
+      break
+    fi
+    sleep 2
+  done
+
+  if wait "$backup_pid"; then
     status="success"
+  elif [[ "$cancelled" == "true" ]]; then
+    status="cancelled"
   else
     status="failed"
   fi
-  kill "$heartbeat_pid" 2>/dev/null || true
-  wait "$heartbeat_pid" 2>/dev/null || true
+  rm -f "$CANCEL_REQUEST"
   output="$(tail -c 32768 "$RUN_LOG")"
   jq -n \
     --arg status "$status" \
