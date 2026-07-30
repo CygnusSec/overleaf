@@ -6,6 +6,7 @@ CONFIG="$BACKUP_ROOT/schedule.json"
 STATE="$BACKUP_ROOT/.scheduler-state"
 REQUESTS="$BACKUP_ROOT/.requests"
 STATUS="$BACKUP_ROOT/last-run.json"
+RUN_LOG="$BACKUP_ROOT/current-run.log"
 HEARTBEAT="$BACKUP_ROOT/.scheduler-heartbeat"
 WEB_GID="${BACKUP_WEB_GID:-33}"
 mkdir -p "$REQUESTS"
@@ -71,13 +72,17 @@ run_backup() {
     done
   ) &
   heartbeat_pid="$!"
-  if output="$(/usr/local/bin/overleaf-backup create 2>&1)"; then
+  : >"$RUN_LOG"
+  chown "root:$WEB_GID" "$RUN_LOG"
+  chmod 640 "$RUN_LOG"
+  if /usr/local/bin/overleaf-backup create >"$RUN_LOG" 2>&1; then
     status="success"
   else
     status="failed"
   fi
   kill "$heartbeat_pid" 2>/dev/null || true
   wait "$heartbeat_pid" 2>/dev/null || true
+  output="$(tail -c 32768 "$RUN_LOG")"
   jq -n \
     --arg status "$status" \
     --arg finishedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \

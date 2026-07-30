@@ -51,6 +51,23 @@ async function readLastRun() {
   }
 }
 
+async function readCurrentRunLog() {
+  const target = Path.join(storagePath(), 'current-run.log')
+  let handle
+  try {
+    const stat = await fs.stat(target)
+    const length = Math.min(stat.size, 32 * 1024)
+    handle = await fs.open(target, 'r')
+    const buffer = Buffer.alloc(length)
+    await handle.read(buffer, 0, length, stat.size - length)
+    return buffer.toString('utf8')
+  } catch {
+    return ''
+  } finally {
+    await handle?.close()
+  }
+}
+
 async function schedulerIsAvailable() {
   try {
     const stat = await fs.stat(
@@ -87,12 +104,14 @@ async function listArchives() {
 }
 
 async function index(req, res) {
-  const [archives, schedule, lastRun, schedulerAvailable] = await Promise.all([
-    listArchives(),
-    readSchedule(),
-    readLastRun(),
-    schedulerIsAvailable(),
-  ])
+  const [archives, schedule, lastRun, schedulerAvailable, currentRunLog] =
+    await Promise.all([
+      listArchives(),
+      readSchedule(),
+      readLastRun(),
+      schedulerIsAvailable(),
+      readCurrentRunLog(),
+    ])
   res.render(
     Path.resolve(import.meta.dirname, '../views/backup-manager.pug'),
     {
@@ -100,6 +119,7 @@ async function index(req, res) {
       archives,
       schedule,
       lastRun,
+      currentRunLog,
       schedulerAvailable,
       enabled: Settings.backupManagerEnabled,
       encryptionConfigured: encryptionConfigured(),
@@ -108,6 +128,14 @@ async function index(req, res) {
       error: req.query.error,
     }
   )
+}
+
+async function clearStatus(req, res) {
+  await Promise.all([
+    fs.unlink(Path.join(storagePath(), 'last-run.json')).catch(() => {}),
+    fs.unlink(Path.join(storagePath(), 'current-run.log')).catch(() => {}),
+  ])
+  return redirectWithMessage(res, 'notice', 'Backup status cleared')
 }
 
 async function create(req, res) {
@@ -223,6 +251,7 @@ async function uploaded(req, res) {
 export default {
   index,
   create,
+  clearStatus,
   updateSchedule,
   download,
   remove,

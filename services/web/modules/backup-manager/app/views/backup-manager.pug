@@ -32,8 +32,14 @@ block content
 							else if lastRun.requestedAt
 								|  requested at #{lastRun.requestedAt}.
 							if lastRun.message
-								pre
-									code= lastRun.message
+								details(open=lastRun.status === 'failed' || lastRun.status === 'running')
+									summary= lastRun.status === 'running' ? 'Live backup log' : 'Backup details'
+									pre
+										code= lastRun.status === 'running' && currentRunLog ? currentRunLog : lastRun.message
+							if !['queued', 'running'].includes(lastRun.status)
+								form.mt-2(method='post' action='/admin/backups/status/clear')
+									input(name='_csrf' type='hidden' value=csrfToken)
+									button.btn.btn-sm.btn-secondary(type='submit') Clear status
 
 					.row
 						.col-md-6
@@ -150,4 +156,10 @@ block content
 
 	if lastRun && ['queued', 'running'].includes(lastRun.status)
 		script.
-			window.setTimeout(() => window.location.reload(), 5000)
+			window.setTimeout(() => window.location.replace('/admin/backups'), 5000)
+
+	if notice || error
+		script.
+			if (window.history && window.history.replaceState) {
+				window.history.replaceState({}, document.title, '/admin/backups')
+			}
