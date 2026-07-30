@@ -345,6 +345,10 @@
       margin: 0;
     }
 
+    .form-text {
+      color: var(--content-secondary-themed);
+    }
+
     .btn {
       justify-self: start;
     }
@@ -365,6 +369,117 @@
       padding-right: 0;
       padding-left: 0;
     }
+  }
+
+  .github-sync-changes {
+    display: grid;
+    overflow: hidden;
+    margin-bottom: var(--spacing-05);
+    border: 1px solid var(--border-divider-themed);
+    border-radius: 8px;
+    color: var(--content-primary-themed);
+    background: var(--bg-secondary-themed);
+  }
+
+  .github-sync-changes-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-03);
+    padding: var(--spacing-04);
+    border-bottom: 1px solid var(--border-divider-themed);
+    background: var(--bg-secondary-themed);
+
+    > span {
+      display: grid;
+      min-width: 0;
+      gap: var(--spacing-01);
+    }
+
+    small {
+      color: var(--content-secondary-themed);
+      font-size: 0.75rem;
+    }
+  }
+
+  .github-sync-change-select-all,
+  .github-sync-change {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-02);
+    margin: 0;
+    color: var(--content-primary-themed);
+    cursor: pointer;
+
+    input[type='checkbox'] {
+      width: 16px;
+      height: 16px;
+      flex: 0 0 16px;
+      margin: 0;
+      accent-color: var(--bg-accent-01);
+    }
+  }
+
+  .github-sync-change-select-all {
+    padding: var(--spacing-03) var(--spacing-04);
+    border-bottom: 1px solid var(--border-divider-themed);
+    background: var(--bg-primary-themed);
+    font-weight: 600;
+  }
+
+  .github-sync-change-list {
+    max-height: 260px;
+    overflow-y: auto;
+  }
+
+  .github-sync-change {
+    min-height: 42px;
+    padding: var(--spacing-02) var(--spacing-04);
+    border-bottom: 1px solid var(--border-divider-themed);
+    background: var(--bg-primary-themed);
+
+    &:hover {
+      background: var(--bg-tertiary-themed);
+    }
+
+    &:last-child {
+      border-bottom: 0;
+    }
+
+    code {
+      overflow: hidden;
+      color: var(--content-primary-themed);
+      font-size: 0.8125rem;
+      line-height: 1.4;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
+  .github-sync-change-status {
+    display: inline-grid;
+    width: 22px;
+    height: 22px;
+    flex: 0 0 22px;
+    place-items: center;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .github-sync-change-status-added {
+    color: var(--content-positive-themed);
+    background: var(--bg-accent-03);
+  }
+
+  .github-sync-change-status-modified {
+    color: var(--content-warning-themed);
+    background: var(--bg-warning-03);
+  }
+
+  .github-sync-change-status-deleted {
+    color: var(--content-danger-themed);
+    background: var(--bg-danger-03);
   }
 }
 

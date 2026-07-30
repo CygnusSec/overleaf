@@ -1,4 +1,5 @@
 import crypto from 'node:crypto'
+import logger from '@overleaf/logger'
 import Settings from '@overleaf/settings'
 import SessionManager from '../../../../app/src/Features/Authentication/SessionManager.mjs'
 import AuthorizationManager from '../../../../app/src/Features/Authorization/AuthorizationManager.mjs'
@@ -20,12 +21,26 @@ import {
   getUser,
 } from './GithubApi.mjs'
 import {
+  getProjectChanges,
   normalizeSyncPath,
   pullProject,
   pushProject,
 } from './GitSyncService.mjs'
 
 const activeProjects = new Set()
+
+function gitSyncErrorMessage(error) {
+  if (error.code === 'ENOENT') {
+    return 'Git is not installed in the ShareLaTeX image'
+  }
+  const stderr =
+    typeof error.stderr === 'string'
+      ? error.stderr.trim()
+      : Buffer.isBuffer(error.stderr)
+        ? error.stderr.toString('utf8').trim()
+        : ''
+  return (stderr || error.message || 'GitHub sync failed').slice(0, 4000)
+}
 
 function isValidBranchName(branch) {
   return (
@@ -416,6 +431,44 @@ async function unlink(req, res) {
   res.sendStatus(204)
 }
 
+async function changes(req, res) {
+  if (!requireConfiguration(res)) return
+  if (!(await requireProjectOwner(req, res))) return
+  const projectId = req.params.projectId
+  if (activeProjects.has(projectId)) {
+    return res.status(409).json({ message: 'A GitHub sync is already running' })
+  }
+  const [connection, link] = await Promise.all([
+    getConnection(currentUserId(req)),
+    GitProjectLink.findOne({ projectId }),
+  ])
+  if (!connection || !link) {
+    return res.status(400).json({ message: 'Link a GitHub repository first' })
+  }
+  activeProjects.add(projectId)
+  try {
+    const token = decryptSecret(connection.token)
+    const projectChanges = await getProjectChanges(link, token)
+    res.json({ changes: projectChanges })
+  } catch (error) {
+    logger.error(
+      {
+        err: error,
+        projectId,
+        repositoryFullName: link.repositoryFullName,
+        branch: link.branch,
+        syncPath: link.syncPath || '',
+      },
+      'Failed to get GitHub sync status'
+    )
+    res.status(error.code === 'ENOENT' ? 503 : 422).json({
+      message: gitSyncErrorMessage(error),
+    })
+  } finally {
+    activeProjects.delete(projectId)
+  }
+}
+
 async function runSync(req, res, direction) {
   if (!requireConfiguration(res)) return
   if (!(await requireProjectOwner(req, res))) return
@@ -443,11 +496,18 @@ async function runSync(req, res, direction) {
     if (direction === 'pull') {
       commit = await pullProject(link, token, currentUserId(req))
     } else {
-      const result = await pushProject(link, token, {
-        name: [user.first_name, user.last_name].filter(Boolean).join(' '),
-        email: user.email,
-        message: req.body.message,
-      })
+      const result = await pushProject(
+        link,
+        token,
+        {
+          name: [user.first_name, user.last_name].filter(Boolean).join(' '),
+          email: user.email,
+          message: req.body.message,
+        },
+        {
+          paths: req.body.paths,
+        }
+      )
       ;({ commit, changed } = result)
     }
     link.lastSyncedCommit = commit
@@ -456,11 +516,19 @@ async function runSync(req, res, direction) {
     await link.save()
     res.json({ commit, changed, syncedAt: link.lastSyncedAt })
   } catch (error) {
-    res.status(502).json({
-      message:
-        error.code === 'ENOENT'
-          ? 'Git is not installed in the ShareLaTeX image'
-          : error.message || 'GitHub sync failed',
+    logger.error(
+      {
+        err: error,
+        projectId,
+        direction,
+        repositoryFullName: link.repositoryFullName,
+        branch: link.branch,
+        syncPath: link.syncPath || '',
+      },
+      'GitHub sync failed'
+    )
+    res.status(error.code === 'ENOENT' ? 503 : 422).json({
+      message: gitSyncErrorMessage(error),
     })
   } finally {
     activeProjects.delete(projectId)
@@ -529,6 +597,7 @@ export default {
   directories,
   disconnect,
   getLink,
+  changes,
   saveLink,
   createAndLinkRepository,
   unlink,

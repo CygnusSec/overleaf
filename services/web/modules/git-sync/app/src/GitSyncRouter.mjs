@@ -48,6 +48,11 @@ function apply(webRouter) {
     login,
     expressify(GitSyncController.getLink)
   )
+  webRouter.get(
+    '/project/:projectId/github-sync/changes',
+    login,
+    expressify(GitSyncController.changes)
+  )
   webRouter.put(
     '/project/:projectId/github-sync',
     login,
