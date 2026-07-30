@@ -3,14 +3,28 @@ import SessionManager from '../../../../app/src/Features/Authentication/SessionM
 import EditorController from '../../../../app/src/Features/Editor/EditorController.mjs'
 import ProjectGetter from '../../../../app/src/Features/Project/ProjectGetter.mjs'
 import SafePath from '../../../../app/src/Features/Project/SafePath.mjs'
-import { AiSystemProvider, AiUserConnection } from './AiModels.mjs'
+import {
+  AiCodexSettings,
+  AiSystemProvider,
+  AiUserConnection,
+} from './AiModels.mjs'
 import { decryptCredential, encryptCredential } from './AiCrypto.mjs'
 import {
   AiProviderError,
   getCatalogProvider,
+  parseAssistantResponse,
   providerCatalog,
   runProvider,
+  systemPrompt,
+  userPrompt,
 } from './AiProviderService.mjs'
+import {
+  codexLoginResult,
+  codexStatus,
+  logoutCodex,
+  runCodex,
+  startCodexLogin,
+} from './CodexService.mjs'
 
 function userId(req) {
   return SessionManager.getLoggedInUserId(req.session)
@@ -58,6 +72,33 @@ function sendProviderError(res, error) {
   return res.status(status).json({ message: error.message })
 }
 
+function codexModels() {
+  const models = Array.isArray(Settings.aiCodexModels)
+    ? Settings.aiCodexModels.map(String).filter(Boolean).slice(0, 100)
+    : []
+  return Array.from(
+    new Set([Settings.aiCodexDefaultModel, ...models].filter(Boolean))
+  )
+}
+
+async function publicCodexStatus(req) {
+  const [status, preferences] = await Promise.all([
+    codexStatus(userId(req)),
+    AiCodexSettings.findOne({ userId: userId(req) }),
+  ])
+  const models = codexModels()
+  return {
+    ...status,
+    models,
+    model:
+      (preferences && models.includes(preferences.model)
+        ? preferences.model
+        : null) ||
+      models[0] ||
+      '',
+  }
+}
+
 export async function catalog(req, res) {
   if (!requireEnabled(res)) return
   res.json({ providers: providerCatalog() })
@@ -70,6 +111,17 @@ export async function listConnections(req, res) {
     AiUserConnection.find({ userId: userId(req) }).sort({ displayName: 1 }),
     AiSystemProvider.find({ enabled: true }).sort({ name: 1 }),
   ])
+  let codex
+  try {
+    codex = await publicCodexStatus(req)
+  } catch (error) {
+    console.error('[ai-assistant] Could not read Codex status', error)
+    codex = {
+      enabled: Settings.enableCodexLogin,
+      connected: false,
+      unavailable: true,
+    }
+  }
   res.json({
     personal: personal
       .filter(item => enabledProviderIds.has(item.providerId))
@@ -80,7 +132,49 @@ export async function listConnections(req, res) {
       model: item.model,
       shared: true,
     })),
+    codex,
   })
+}
+
+export async function getCodexStatus(req, res) {
+  if (!requireEnabled(res)) return
+  res.json(await publicCodexStatus(req))
+}
+
+export async function updateCodexSettings(req, res) {
+  if (!requireEnabled(res)) return
+  const model = String(req.body.model || '').trim()
+  if (!codexModels().includes(model)) {
+    return res.status(422).json({ message: 'Invalid Codex model' })
+  }
+  await AiCodexSettings.updateOne(
+    { userId: userId(req) },
+    { $set: { model, updatedAt: new Date() } },
+    { upsert: true }
+  )
+  res.json(await publicCodexStatus(req))
+}
+
+export async function beginCodexLogin(req, res) {
+  if (!requireEnabled(res)) return
+  try {
+    res.json(await startCodexLogin(userId(req)))
+  } catch (error) {
+    return sendProviderError(res, error)
+  }
+}
+
+export async function getCodexLoginResult(req, res) {
+  if (!requireEnabled(res)) return
+  const loginId = String(req.params.loginId || '')
+  if (!/^[a-zA-Z0-9_-]{1,200}$/.test(loginId)) return res.sendStatus(404)
+  res.json(await codexLoginResult(userId(req), loginId))
+}
+
+export async function disconnectCodex(req, res) {
+  if (!requireEnabled(res)) return
+  await logoutCodex(userId(req))
+  res.sendStatus(204)
 }
 
 export async function createConnection(req, res) {
@@ -201,7 +295,17 @@ export async function run(req, res) {
   }
   let runtime
   let personal
-  if (String(req.body.connectionId || '').startsWith('system:')) {
+  const connectionId = String(req.body.connectionId || '')
+  const isCodex = connectionId === 'codex'
+  if (isCodex) {
+    const status = await publicCodexStatus(req)
+    if (!status.connected) {
+      return res.status(401).json({
+        message: 'Connect Codex with ChatGPT in Account settings first',
+      })
+    }
+    runtime = { model: status.model }
+  } else if (connectionId.startsWith('system:')) {
     const id = req.body.connectionId.slice(7)
     if (!validObjectId(id)) {
       return res.status(404).json({ message: 'AI provider not found' })
@@ -241,13 +345,27 @@ export async function run(req, res) {
   }
   let result
   try {
-    result = await runProvider({
-      ...runtime,
-      prompt,
-      content,
-      selection,
-      mode,
-    })
+    if (isCodex) {
+      const text = await runCodex({
+        userId: userId(req),
+        model: runtime.model,
+        prompt: `${systemPrompt(mode)}\n\n${userPrompt({
+          prompt,
+          content,
+          selection,
+          mode,
+        })}`,
+      })
+      result = parseAssistantResponse(text, mode)
+    } else {
+      result = await runProvider({
+        ...runtime,
+        prompt,
+        content,
+        selection,
+        mode,
+      })
+    }
   } catch (error) {
     return sendProviderError(res, error)
   }
@@ -418,6 +536,11 @@ export default {
   testConnection,
   updateConnection,
   deleteConnection,
+  getCodexStatus,
+  updateCodexSettings,
+  beginCodexLogin,
+  getCodexLoginResult,
+  disconnectCodex,
   run,
   applyProjectChanges,
   adminPage,

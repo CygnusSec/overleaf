@@ -6,6 +6,8 @@ This module provides two types of AI connections:
   encrypted API key;
 - shared Local AI connections: site administrators configure an
   OpenAI-compatible endpoint once for all users.
+- Codex connections: users sign in with their own ChatGPT account through the
+  official Codex device authorization flow; no OpenAI API key is required.
 
 ## Configuration
 
@@ -21,6 +23,9 @@ Set the following environment variables:
 AI_INTEGRATION_ENABLED=true
 AI_CREDENTIAL_ENCRYPTION_KEY=<base64-encoded-32-byte-key>
 AI_PROVIDERS_CONFIG=[{"id":"openai","name":"OpenAI","enabled":true,"adapter":"openai","baseUrl":"https://api.openai.com/v1","defaultModel":"gpt-5.6-sol","models":["gpt-5.6-sol","gpt-5.6-terra","gpt-5.6-luna","gpt-5.5","gpt-5.4","gpt-5.4-mini"]}]
+CODEX_LOGIN_ENABLED=true
+CODEX_DEFAULT_MODEL=gpt-5.6-sol
+CODEX_MODELS=["gpt-5.6-sol","gpt-5.6-terra","gpt-5.6-luna","gpt-5.5","gpt-5.4","gpt-5.4-mini"]
 ```
 
 `AI_PROVIDERS_CONFIG` is only a catalog. It must never contain user API keys.
@@ -31,6 +36,11 @@ can be added without changing application code.
 Keep `AI_CREDENTIAL_ENCRYPTION_KEY` outside the database and include it in the
 server's protected backup procedure. Existing credentials cannot be decrypted
 if this key is lost.
+
+Codex OAuth state is stored under `/var/lib/overleaf/codex/<user-id>` with a
+separate `CODEX_HOME` for every Overleaf user. Keep that directory in the
+normal `/var/lib/overleaf` backup. Never mount one shared host `~/.codex`
+directory into the container.
 
 ## Usage
 

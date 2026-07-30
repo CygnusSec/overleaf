@@ -48,6 +48,32 @@ export default {
       login,
       expressify(AiAssistantController.deleteConnection)
     )
+    webRouter.get(
+      '/api/ai/codex',
+      login,
+      expressify(AiAssistantController.getCodexStatus)
+    )
+    webRouter.put(
+      '/api/ai/codex',
+      login,
+      expressify(AiAssistantController.updateCodexSettings)
+    )
+    webRouter.post(
+      '/api/ai/codex/login',
+      login,
+      RateLimiterMiddleware.rateLimit(aiConnectionTestRateLimiter),
+      expressify(AiAssistantController.beginCodexLogin)
+    )
+    webRouter.get(
+      '/api/ai/codex/login/:loginId',
+      login,
+      expressify(AiAssistantController.getCodexLoginResult)
+    )
+    webRouter.delete(
+      '/api/ai/codex',
+      login,
+      expressify(AiAssistantController.disconnectCodex)
+    )
     webRouter.post(
       '/project/:project_id/ai/run',
       login,

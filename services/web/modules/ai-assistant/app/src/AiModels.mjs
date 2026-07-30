@@ -48,6 +48,20 @@ const AiSystemProviderSchema = new Schema(
   { collection: 'aiSystemProviders', minimize: false }
 )
 
+const AiCodexSettingsSchema = new Schema(
+  {
+    userId: {
+      type: Schema.Types.ObjectId,
+      required: true,
+      unique: true,
+      index: true,
+    },
+    model: { type: String, required: true },
+    updatedAt: { type: Date, default: Date.now },
+  },
+  { collection: 'aiCodexSettings', minimize: false }
+)
+
 export const AiUserConnection = mongoose.model(
   'AiUserConnection',
   AiUserConnectionSchema
@@ -55,4 +69,8 @@ export const AiUserConnection = mongoose.model(
 export const AiSystemProvider = mongoose.model(
   'AiSystemProvider',
   AiSystemProviderSchema
+)
+export const AiCodexSettings = mongoose.model(
+  'AiCodexSettings',
+  AiCodexSettingsSchema
 )

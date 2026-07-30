@@ -16,6 +16,11 @@ type Connection = {
   model: string
   shared?: boolean
 }
+type CodexStatus = {
+  connected: boolean
+  accountLabel?: string | null
+  model?: string
+}
 
 export default function AiAssistantPanel() {
   const enabled = getMeta('ol-aiAssistantEnabled')
@@ -49,8 +54,18 @@ export default function AiAssistantPanel() {
       const result = await getJSON<{
         personal: Connection[]
         shared: Connection[]
+        codex?: CodexStatus
       }>('/api/ai/connections')
-      const items = [...result.shared, ...result.personal]
+      const codex = result.codex?.connected
+        ? [
+            {
+              id: 'codex',
+              displayName: 'Codex',
+              model: result.codex.model || 'ChatGPT',
+            },
+          ]
+        : []
+      const items = [...codex, ...result.shared, ...result.personal]
       setConnections(items)
       setConnectionId(current => current || items[0]?.id || '')
     } catch (err) {

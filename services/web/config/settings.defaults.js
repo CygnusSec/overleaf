@@ -1199,6 +1199,12 @@ module.exports = {
   aiProvidersConfig: jsonArrayFromEnv('AI_PROVIDERS_CONFIG'),
   aiRequestTimeoutMs: intFromEnv('AI_REQUEST_TIMEOUT_MS', 120000),
   aiMaxDocumentChars: intFromEnv('AI_MAX_DOCUMENT_CHARS', 200000),
+  enableCodexLogin: process.env.CODEX_LOGIN_ENABLED === 'true',
+  aiCodexExecutable: process.env.CODEX_EXECUTABLE || 'codex',
+  aiCodexDataPath:
+    process.env.CODEX_USER_DATA_PATH || '/var/lib/overleaf/codex',
+  aiCodexDefaultModel: process.env.CODEX_DEFAULT_MODEL || 'gpt-5.6-sol',
+  aiCodexModels: jsonArrayFromEnv('CODEX_MODELS'),
 }
 
 module.exports.mergeWith = function (overrides) {

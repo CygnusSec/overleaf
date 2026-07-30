@@ -91,7 +91,7 @@ async function fetchJson(url, options) {
   }
 }
 
-function systemPrompt(mode) {
+export function systemPrompt(mode) {
   const base =
     'You are a LaTeX assistant inside Overleaf. Be precise and preserve document semantics. Never invent project files or claim that a change was applied.'
   if (mode === 'ask') return `${base} Answer the user clearly.`
@@ -104,7 +104,7 @@ top-level folders. File and folder names must be clean base names without path
 separators. Do not delete or overwrite existing project files.`
 }
 
-function userPrompt({ prompt, content, selection, mode }) {
+export function userPrompt({ prompt, content, selection, mode }) {
   return `Request:
 ${prompt}
 
@@ -192,6 +192,10 @@ export async function runProvider({
       ? contentValue.map(item => item?.text || '').join('')
       : contentValue || ''
   }
+  return parseAssistantResponse(text, mode)
+}
+
+export function parseAssistantResponse(text, mode) {
   if (!text) {
     throw new AiProviderError('AI provider returned an empty response', 502)
   }

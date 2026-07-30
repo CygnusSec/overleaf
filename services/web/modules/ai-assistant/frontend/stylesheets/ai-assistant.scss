@@ -19,6 +19,30 @@
     border-radius: var(--border-radius-base);
   }
 
+  .ai-codex-card {
+    display: flex;
+    gap: var(--spacing-04);
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--spacing-06);
+    padding: var(--spacing-05);
+    color: var(--content-primary-themed);
+    background: var(--bg-secondary-themed);
+    border: 1px solid var(--border-divider-themed);
+    border-left: 4px solid var(--green-50);
+    border-radius: var(--border-radius-base);
+  }
+
+  .ai-codex-device-code {
+    margin-top: var(--spacing-03);
+    color: var(--content-primary-themed);
+  }
+
+  .ai-codex-model {
+    max-width: 320px;
+    margin-top: var(--spacing-04);
+  }
+
   .ai-connection-card-details {
     min-width: 0;
   }

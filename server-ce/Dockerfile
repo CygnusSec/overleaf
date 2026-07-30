@@ -5,6 +5,7 @@
 
 ARG OVERLEAF_BASE_TAG=sharelatex/sharelatex-base:latest
 FROM $OVERLEAF_BASE_TAG
+ARG CODEX_CLI_VERSION=latest
 
 WORKDIR /overleaf
 
@@ -24,6 +25,7 @@ COPY server-ce/genScript.js server-ce/services.js /overleaf/
 ENV PATH="/overleaf/node_modules/.bin:$PATH"
 ENV COREPACK_HOME=/opt/corepack
 RUN corepack enable && corepack install -g yarn@4.14.1
+RUN npm install -g "@openai/codex@${CODEX_CLI_VERSION}"
 ENV COREPACK_ENABLE_NETWORK=0
 
 # Install yarn dependencies
