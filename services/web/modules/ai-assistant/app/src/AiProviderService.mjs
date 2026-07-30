@@ -123,9 +123,11 @@ export async function runProvider({
   content,
   selection,
   mode,
+  history = [],
 }) {
   const messages = [
     { role: 'system', content: systemPrompt(mode) },
+    ...history,
     {
       role: 'user',
       content: userPrompt({ prompt, content, selection, mode }),
@@ -154,7 +156,7 @@ export async function runProvider({
         model,
         max_tokens: 8192,
         system: messages[0].content,
-        messages: [messages[1]],
+        messages: messages.slice(1),
       }),
     })
     text = data.content?.map(item => item.text || '').join('') || ''
@@ -169,7 +171,10 @@ export async function runProvider({
         },
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: messages[0].content }] },
-          contents: [{ role: 'user', parts: [{ text: messages[1].content }] }],
+          contents: messages.slice(1).map(message => ({
+            role: message.role === 'assistant' ? 'model' : 'user',
+            parts: [{ text: message.content }],
+          })),
           generationConfig: { maxOutputTokens: 8192 },
         }),
       }

@@ -53,3 +53,8 @@ and create new top-level files or folders. Nothing is applied until the user
 explicitly accepts the complete plan. Existing project files are never silently
 overwritten, and a stale current-document proposal is rejected when the
 document changes while the AI request is running.
+
+Conversations are stored per user and project in the `aiConversations`
+collection. The latest 12 messages are included as context for the next request,
+and the latest 100 messages are retained. Users can clear their own conversation
+from the editor rail without affecting other collaborators.

@@ -83,6 +83,18 @@ export default {
       AuthorizationMiddleware.ensureUserCanReadProject,
       expressify(AiAssistantController.run)
     )
+    webRouter.get(
+      '/project/:project_id/ai/conversation',
+      login,
+      AuthorizationMiddleware.ensureUserCanReadProject,
+      expressify(AiAssistantController.getConversation)
+    )
+    webRouter.delete(
+      '/project/:project_id/ai/conversation',
+      login,
+      AuthorizationMiddleware.ensureUserCanReadProject,
+      expressify(AiAssistantController.clearConversation)
+    )
     webRouter.post(
       '/project/:project_id/ai/apply',
       login,

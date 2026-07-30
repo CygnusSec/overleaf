@@ -5,6 +5,7 @@ import ProjectGetter from '../../../../app/src/Features/Project/ProjectGetter.mj
 import SafePath from '../../../../app/src/Features/Project/SafePath.mjs'
 import {
   AiCodexSettings,
+  AiConversation,
   AiSystemProvider,
   AiUserConnection,
 } from './AiModels.mjs'
@@ -79,6 +80,57 @@ function codexModels() {
   return Array.from(
     new Set([Settings.aiCodexDefaultModel, ...models].filter(Boolean))
   )
+}
+
+function publicMessages(conversation) {
+  return (conversation?.messages || []).map(message => ({
+    id: message._id.toString(),
+    role: message.role,
+    content: message.content,
+    mode: message.mode,
+    createdAt: message.createdAt,
+  }))
+}
+
+async function appendConversationMessages(query, messages) {
+  const update = {
+    $push: {
+      messages: {
+        $each: messages,
+        $slice: -100,
+      },
+    },
+    $set: { updatedAt: new Date() },
+    $setOnInsert: { createdAt: new Date() },
+  }
+  try {
+    return await AiConversation.findOneAndUpdate(query, update, {
+      upsert: true,
+      new: true,
+    })
+  } catch (error) {
+    // Two browser tabs can create the same project conversation concurrently.
+    if (error?.code !== 11000) throw error
+    return await AiConversation.findOneAndUpdate(query, update, { new: true })
+  }
+}
+
+export async function getConversation(req, res) {
+  if (!requireEnabled(res)) return
+  const conversation = await AiConversation.findOne({
+    userId: userId(req),
+    projectId: req.params.project_id,
+  })
+  res.json({ messages: publicMessages(conversation) })
+}
+
+export async function clearConversation(req, res) {
+  if (!requireEnabled(res)) return
+  await AiConversation.deleteOne({
+    userId: userId(req),
+    projectId: req.params.project_id,
+  })
+  res.sendStatus(204)
 }
 
 async function publicCodexStatus(req) {
@@ -344,12 +396,29 @@ export async function run(req, res) {
     }
   }
   let result
+  const conversation = await AiConversation.findOne({
+    userId: userId(req),
+    projectId: req.params.project_id,
+  })
+  let history = (conversation?.messages || []).slice(-12).map(message => ({
+    role: message.role,
+    content: message.content.slice(0, 20000),
+  }))
+  while (
+    history.length > 2 &&
+    history.reduce((size, message) => size + message.content.length, 0) > 40000
+  ) {
+    // Messages are persisted as user/assistant pairs.
+    history = history.slice(2)
+  }
   try {
     if (isCodex) {
       const text = await runCodex({
         userId: userId(req),
         model: runtime.model,
-        prompt: `${systemPrompt(mode)}\n\n${userPrompt({
+        prompt: `${systemPrompt(mode)}\n\nConversation so far:\n${history
+          .map(message => `${message.role}: ${message.content}`)
+          .join('\n\n')}\n\n${userPrompt({
           prompt,
           content,
           selection,
@@ -364,6 +433,7 @@ export async function run(req, res) {
         content,
         selection,
         mode,
+        history,
       })
     }
   } catch (error) {
@@ -379,7 +449,22 @@ export async function run(req, res) {
     personal.lastUsedAt = new Date()
     await personal.save()
   }
-  res.json(result)
+  const assistantContent = String(
+    mode === 'ask'
+      ? result.answer
+      : result.explanation || 'An edit proposal was generated.'
+  ).slice(0, 50000)
+  const updatedConversation = await appendConversationMessages(
+    { userId: userId(req), projectId: req.params.project_id },
+    [
+      { role: 'user', content: prompt, mode },
+      { role: 'assistant', content: assistantContent, mode },
+    ]
+  )
+  res.json({
+    ...result,
+    messages: publicMessages(updatedConversation).slice(-2),
+  })
 }
 
 export async function applyProjectChanges(req, res) {

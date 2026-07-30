@@ -1,11 +1,22 @@
-import { FormEvent, useCallback, useEffect, useState } from 'react'
-import { FetchError, getJSON, postJSON } from '@/infrastructure/fetch-json'
+import {
+  FormEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
+import {
+  deleteJSON,
+  FetchError,
+  getJSON,
+  postJSON,
+} from '@/infrastructure/fetch-json'
 import { useIdeReactContext } from '@/features/ide-react/context/ide-react-context'
 import { useEditorManagerContext } from '@/features/ide-react/context/editor-manager-context'
 import { useEditorViewContext } from '@/features/ide-react/context/editor-view-context'
 import OLButton from '@/shared/components/ol/ol-button'
 import OLNotification from '@/shared/components/ol/ol-notification'
-import OLFormSelect from '@/shared/components/ol/ol-form-select'
+import MaterialIcon from '@/shared/components/material-icon'
 import getMeta from '@/utils/meta'
 import '../stylesheets/ai-assistant.scss'
 import RailPanelHeader from '@/features/ide-react/components/rail/rail-panel-header'
@@ -21,6 +32,13 @@ type CodexStatus = {
   accountLabel?: string | null
   model?: string
 }
+type ChatMessage = {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  mode: 'ask' | 'edit'
+  createdAt: string
+}
 
 export default function AiAssistantPanel() {
   const enabled = getMeta('ol-aiAssistantEnabled')
@@ -31,7 +49,7 @@ export default function AiAssistantPanel() {
   const [connectionId, setConnectionId] = useState('')
   const [mode, setMode] = useState<'ask' | 'edit'>('ask')
   const [prompt, setPrompt] = useState('')
-  const [answer, setAnswer] = useState('')
+  const [messages, setMessages] = useState<ChatMessage[]>([])
   const [proposal, setProposal] = useState<{
     explanation: string
     replacement: string | null
@@ -42,20 +60,36 @@ export default function AiAssistantPanel() {
   const [busy, setBusy] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string>()
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const loadRequestRef = useRef(0)
+  const projectIdRef = useRef(projectId)
   const canWrite =
     permissionsLevel === 'owner' || permissionsLevel === 'readAndWrite'
 
   const load = useCallback(async () => {
+    const requestId = ++loadRequestRef.current
+    projectIdRef.current = projectId
     if (!enabled) {
       setLoading(false)
       return
     }
+    setLoading(true)
+    setBusy(false)
+    setError(undefined)
+    setProposal(undefined)
+    setMessages([])
     try {
-      const result = await getJSON<{
-        personal: Connection[]
-        shared: Connection[]
-        codex?: CodexStatus
-      }>('/api/ai/connections')
+      const [result, conversation] = await Promise.all([
+        getJSON<{
+          personal: Connection[]
+          shared: Connection[]
+          codex?: CodexStatus
+        }>('/api/ai/connections'),
+        getJSON<{ messages: ChatMessage[] }>(
+          `/project/${projectId}/ai/conversation`
+        ),
+      ])
+      if (requestId !== loadRequestRef.current) return
       const codex = result.codex?.connected
         ? [
             {
@@ -67,52 +101,70 @@ export default function AiAssistantPanel() {
         : []
       const items = [...codex, ...result.shared, ...result.personal]
       setConnections(items)
-      setConnectionId(current => current || items[0]?.id || '')
+      setConnectionId(current =>
+        items.some(item => item.id === current)
+          ? current
+          : items[0]?.id || ''
+      )
+      setMessages(conversation.messages)
     } catch (err) {
+      if (requestId !== loadRequestRef.current) return
+      setConnections([])
+      setMessages([])
       setError(
         err instanceof FetchError
           ? err.getUserFacingMessage()
           : 'Could not load AI connections.'
       )
     } finally {
-      setLoading(false)
+      if (requestId === loadRequestRef.current) {
+        setLoading(false)
+      }
     }
-  }, [enabled])
+  }, [enabled, projectId])
 
   useEffect(() => {
     load()
   }, [load])
 
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ block: 'nearest' })
+  }, [messages, proposal])
+
   if (!enabled) return null
 
   if (loading) {
     return (
-      <>
+      <div className="ai-assistant-layout">
         <RailPanelHeader title="AI Assistant" />
         <div className="ai-assistant-panel">
-          <div className="ai-assistant-heading">
-            <span className="ai-status-badge">Loading connections…</span>
+          <div className="ai-assistant-state">
+            <div className="ai-assistant-heading">
+              <span className="ai-status-badge">Loading connections…</span>
+            </div>
           </div>
         </div>
-      </>
+      </div>
     )
   }
 
   if (!connections.length) {
     return (
-      <>
+      <div className="ai-assistant-layout">
         <RailPanelHeader title="AI Assistant" />
         <div className="ai-assistant-panel">
-          {error ? <OLNotification type="error" content={error} /> : null}
-          <p className="text-muted">
-            Add an AI connection in Account settings, or ask an administrator
-            to enable a shared Local AI provider.
-          </p>
-          <OLButton variant="secondary" href="/user/settings#ai-connections">
-            Open Account settings
-          </OLButton>
+          <div className="ai-assistant-state">
+            {error ? <OLNotification type="error" content={error} /> : null}
+            <p className="text-muted">
+              Add an AI connection in Account settings, or ask an administrator
+              to enable a shared Local AI provider.
+            </p>
+            <OLButton variant="secondary" href="/user/settings#ai-connections">
+              Open Account settings
+            </OLButton>
+          </div>
         </div>
-      </>
+      </div>
     )
   }
 
@@ -120,6 +172,7 @@ export default function AiAssistantPanel() {
     event.preventDefault()
     const content = getCurrentDocValue()
     if (!content || !prompt.trim()) return
+    const requestProjectId = projectId
     const selection =
       view && !view.state.selection.main.empty
         ? view.state.sliceDoc(
@@ -129,8 +182,16 @@ export default function AiAssistantPanel() {
         : ''
     setBusy(true)
     setError(undefined)
-    setAnswer('')
     setProposal(undefined)
+    const pendingMessage: ChatMessage = {
+      id: `pending-${Date.now()}`,
+      role: 'user',
+      content: prompt.trim(),
+      mode,
+      createdAt: new Date().toISOString(),
+    }
+    setMessages(current => [...current, pendingMessage])
+    setPrompt('')
     try {
       const result = await postJSON<{
         answer?: string
@@ -138,11 +199,33 @@ export default function AiAssistantPanel() {
         replacement?: string | null
         files?: Array<{ name: string; content: string }>
         folders?: string[]
+        messages?: ChatMessage[]
       }>(`/project/${projectId}/ai/run`, {
         body: { connectionId, mode, prompt, content, selection },
       })
-      if (mode === 'ask') setAnswer(result.answer || '')
-      else {
+      if (projectIdRef.current !== requestProjectId) return
+      const newMessages = result.messages || []
+      const assistantMessages = newMessages.filter(
+        message => message.role === 'assistant'
+      )
+      setMessages(current => [
+        ...current,
+        ...(assistantMessages.length
+          ? assistantMessages
+          : [
+              {
+                id: `assistant-${Date.now()}`,
+                role: 'assistant' as const,
+                content:
+                  mode === 'ask'
+                    ? result.answer || ''
+                    : result.explanation || 'An edit proposal was generated.',
+                mode,
+                createdAt: new Date().toISOString(),
+              },
+            ]),
+      ])
+      if (mode === 'edit') {
         setProposal({
           explanation: result.explanation || '',
           replacement:
@@ -153,10 +236,41 @@ export default function AiAssistantPanel() {
         })
       }
     } catch (err) {
+      if (projectIdRef.current !== requestProjectId) return
+      setMessages(current =>
+        current.filter(message => message.id !== pendingMessage.id)
+      )
+      setPrompt(pendingMessage.content)
       setError(
         err instanceof FetchError
           ? err.getUserFacingMessage()
           : 'The AI request failed.'
+      )
+    } finally {
+      if (projectIdRef.current === requestProjectId) {
+        setBusy(false)
+      }
+    }
+  }
+
+  const clearConversation = async () => {
+    if (
+      !messages.length ||
+      !window.confirm('Clear this AI conversation for the current project?')
+    ) {
+      return
+    }
+    setBusy(true)
+    setError(undefined)
+    try {
+      await deleteJSON(`/project/${projectId}/ai/conversation`)
+      setMessages([])
+      setProposal(undefined)
+    } catch (err) {
+      setError(
+        err instanceof FetchError
+          ? err.getUserFacingMessage()
+          : 'Could not clear the AI conversation.'
       )
     } finally {
       setBusy(false)
@@ -198,9 +312,6 @@ export default function AiAssistantPanel() {
         })
       }
       setProposal(undefined)
-      setAnswer(
-        'The approved LaTeX and project file changes were applied successfully.'
-      )
     } catch (err) {
       setError(
         err instanceof FetchError
@@ -213,132 +324,200 @@ export default function AiAssistantPanel() {
   }
 
   return (
-    <>
+    <div className="ai-assistant-layout">
       <RailPanelHeader
         title="AI Assistant"
         actions={
-          <span className="ai-status-badge">
-            {connections.length} available
-          </span>
+          messages.length ? (
+            <button
+              type="button"
+              className="ai-header-action"
+              onClick={clearConversation}
+              disabled={busy}
+              title="Clear conversation"
+              aria-label="Clear conversation"
+            >
+              <MaterialIcon type="delete" />
+            </button>
+          ) : null
         }
       />
       <div className="ai-assistant-panel">
-        <p className="small text-muted">
-          AI can make mistakes. Review every proposed LaTeX change before
-          applying it.
-        </p>
         {error ? <OLNotification type="error" content={error} /> : null}
-        <form onSubmit={run}>
-          <div className="form-group">
-            <label className="form-label" htmlFor="ai-editor-connection">
-              AI connection
-            </label>
-            <OLFormSelect
-              id="ai-editor-connection"
-              value={connectionId}
-              onChange={event => setConnectionId(event.target.value)}
-            >
-              {connections.map(item => (
-                <option value={item.id} key={item.id}>
-                  {item.shared ? 'Shared · ' : 'My · '}
-                  {item.displayName} · {item.model}
-                </option>
+        <div className="ai-conversation-scroll">
+          {messages.length ? (
+            <div className="ai-conversation" aria-live="polite">
+              {messages.map(message => (
+                <div
+                  className={`ai-chat-message ai-chat-message-${message.role}`}
+                  key={message.id}
+                >
+                  <div className="ai-chat-message-role">
+                    {message.role === 'user' ? 'You' : 'AI'}
+                    {message.mode === 'edit' ? ' · Edit' : ''}
+                  </div>
+                  <div className="ai-chat-message-content">
+                    {message.content}
+                  </div>
+                </div>
               ))}
-            </OLFormSelect>
-          </div>
-          <div className="form-group">
-            <label className="form-label" htmlFor="ai-editor-mode">
-              Mode
-            </label>
-            <OLFormSelect
-              id="ai-editor-mode"
-              value={mode}
-              onChange={event => setMode(event.target.value as 'ask' | 'edit')}
-            >
-              <option value="ask">Ask about this document</option>
-              <option value="edit">Edit LaTeX and project files</option>
-            </OLFormSelect>
-          </div>
-          <div className="form-group">
-            <label className="form-label" htmlFor="ai-editor-prompt">
-              Request
-            </label>
+            </div>
+          ) : (
+            <div className="ai-conversation-empty">
+              <MaterialIcon type="smart_toy" className="ai-empty-icon" />
+              <strong>How can I help with this document?</strong>
+              <span>
+                Ask a question or request a reviewed LaTeX change.
+              </span>
+            </div>
+          )}
+          {proposal ? (
+            <div className="ai-proposal-card">
+              <div className="ai-proposal-summary">
+                <div>
+                  <strong>Proposed change</strong>
+                  <p>{proposal.explanation}</p>
+                </div>
+                <span className="ai-proposal-count">Review</span>
+              </div>
+              {typeof proposal.replacement === 'string' ? (
+                <details className="ai-proposal-details">
+                  <summary>Review current file update</summary>
+                  <pre className="ai-proposal-code">
+                    {proposal.replacement}
+                  </pre>
+                </details>
+              ) : null}
+              {proposal.files.length || proposal.folders.length ? (
+                <details className="ai-proposal-details">
+                  <summary>
+                    Review new files and folders (
+                    {proposal.files.length + proposal.folders.length})
+                  </summary>
+                  {proposal.folders.length ? (
+                    <>
+                      <strong>Folders</strong>
+                      <ul>
+                        {proposal.folders.map(name => (
+                          <li key={name}>{name}</li>
+                        ))}
+                      </ul>
+                    </>
+                  ) : null}
+                  {proposal.files.length ? (
+                    <>
+                      <strong>Files</strong>
+                      <ul>
+                        {proposal.files.map(file => (
+                          <li key={file.name}>{file.name}</li>
+                        ))}
+                      </ul>
+                    </>
+                  ) : null}
+                </details>
+              ) : null}
+              <div className="ai-proposal-actions">
+                <OLButton
+                  variant="primary"
+                  size="sm"
+                  onClick={apply}
+                  disabled={
+                    !canWrite ||
+                    busy ||
+                    (proposal.replacement === null &&
+                      !proposal.files.length &&
+                      !proposal.folders.length)
+                  }
+                >
+                  Apply changes
+                </OLButton>
+                <OLButton
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setProposal(undefined)}
+                >
+                  Reject
+                </OLButton>
+              </div>
+            </div>
+          ) : null}
+          {busy ? (
+            <div className="ai-thinking">
+              <span className="ai-thinking-dot" />
+              Thinking…
+            </div>
+          ) : null}
+          <div ref={messagesEndRef} />
+        </div>
+        <form className="ai-composer" onSubmit={run}>
+          <div className="ai-composer-input">
             <textarea
               id="ai-editor-prompt"
-              className="form-control"
-              rows={5}
+              rows={3}
               value={prompt}
               onChange={event => setPrompt(event.target.value)}
-              placeholder="Explain this equation, improve the selected text, or fix the LaTeX…"
+              onKeyDown={event => {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                  event.preventDefault()
+                  event.currentTarget.form?.requestSubmit()
+                }
+              }}
+              placeholder={
+                mode === 'edit'
+                  ? 'Ask for changes…'
+                  : 'Ask about this document…'
+              }
+              aria-label="Message AI Assistant"
               required
             />
           </div>
-          <OLButton
-            type="submit"
-            variant="primary"
-            disabled={busy || !connectionId}
-            className="w-100"
-          >
-            {busy
-              ? 'Working…'
-              : mode === 'ask'
-                ? 'Ask AI'
-                : 'Generate proposal'}
-          </OLButton>
-        </form>
-        {answer ? (
-          <div className="ai-response-card">
-            <div className="ai-response-content">{answer}</div>
-          </div>
-        ) : null}
-        {proposal ? (
-          <div className="ai-proposal-card">
-            <h4>Proposed change</h4>
-            <p>{proposal.explanation}</p>
-            {typeof proposal.replacement === 'string' ? (
-              <>
-                <strong>Update current file</strong>
-                <pre className="ai-proposal-code">{proposal.replacement}</pre>
-              </>
-            ) : null}
-            {proposal.folders.length ? (
-              <div className="ai-file-operation-list">
-                <strong>New folders</strong>
-                <ul>
-                  {proposal.folders.map(name => (
-                    <li key={name}>{name}</li>
+          <div className="ai-composer-toolbar">
+            <div className="ai-composer-options">
+              <label className="ai-compact-select">
+                <MaterialIcon type={mode === 'edit' ? 'edit' : 'chat'} />
+                <span className="visually-hidden">Agent</span>
+                <select
+                  value={mode}
+                  onChange={event =>
+                    setMode(event.target.value as 'ask' | 'edit')
+                  }
+                  aria-label="AI agent"
+                >
+                  <option value="ask">Ask</option>
+                  <option value="edit">Edit</option>
+                </select>
+              </label>
+              <label className="ai-compact-select ai-model-select">
+                <MaterialIcon type="bolt" />
+                <span className="visually-hidden">Model</span>
+                <select
+                  value={connectionId}
+                  onChange={event => setConnectionId(event.target.value)}
+                  aria-label="AI model"
+                >
+                  {connections.map(item => (
+                    <option value={item.id} key={item.id}>
+                      {item.displayName} · {item.model}
+                    </option>
                   ))}
-                </ul>
-              </div>
-            ) : null}
-            {proposal.files.length ? (
-              <div className="ai-file-operation-list">
-                <strong>New files</strong>
-                <ul>
-                  {proposal.files.map(file => (
-                    <li key={file.name}>{file.name}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-            <div className="ai-proposal-actions">
-              <OLButton
-                variant="primary"
-                onClick={apply}
-                disabled={!canWrite || busy}
-              >
-                Apply approved changes
-              </OLButton>
-              <OLButton
-                variant="secondary"
-                onClick={() => setProposal(undefined)}
-              >
-                Reject
-              </OLButton>
+                </select>
+              </label>
             </div>
+            <button
+              type="submit"
+              className="ai-send-button"
+              disabled={busy || !connectionId || !prompt.trim()}
+              aria-label={busy ? 'AI is working' : 'Send message'}
+              title={busy ? 'AI is working' : 'Send message'}
+            >
+              <MaterialIcon type={busy ? 'hourglass_top' : 'arrow_upward'} />
+            </button>
           </div>
-        ) : null}
+          <div className="ai-composer-hint">
+            Enter to send · Shift+Enter for a new line
+          </div>
+        </form>
       </div>
-    </>
+    </div>
   )
 }

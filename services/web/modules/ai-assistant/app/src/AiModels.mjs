@@ -62,6 +62,25 @@ const AiCodexSettingsSchema = new Schema(
   { collection: 'aiCodexSettings', minimize: false }
 )
 
+const AiConversationSchema = new Schema(
+  {
+    userId: { type: Schema.Types.ObjectId, required: true, index: true },
+    projectId: { type: Schema.Types.ObjectId, required: true, index: true },
+    messages: [
+      {
+        role: { type: String, enum: ['user', 'assistant'], required: true },
+        content: { type: String, required: true },
+        mode: { type: String, enum: ['ask', 'edit'], default: 'ask' },
+        createdAt: { type: Date, default: Date.now },
+      },
+    ],
+    createdAt: { type: Date, default: Date.now },
+    updatedAt: { type: Date, default: Date.now },
+  },
+  { collection: 'aiConversations', minimize: false }
+)
+AiConversationSchema.index({ userId: 1, projectId: 1 }, { unique: true })
+
 export const AiUserConnection = mongoose.model(
   'AiUserConnection',
   AiUserConnectionSchema
@@ -73,4 +92,8 @@ export const AiSystemProvider = mongoose.model(
 export const AiCodexSettings = mongoose.model(
   'AiCodexSettings',
   AiCodexSettingsSchema
+)
+export const AiConversation = mongoose.model(
+  'AiConversation',
+  AiConversationSchema
 )
