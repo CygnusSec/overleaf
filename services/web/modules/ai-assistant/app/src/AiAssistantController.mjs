@@ -729,6 +729,8 @@ export default {
   beginCodexLogin,
   getCodexLoginResult,
   disconnectCodex,
+  getConversation,
+  clearConversation,
   run,
   applyProjectChanges,
   adminPage,
