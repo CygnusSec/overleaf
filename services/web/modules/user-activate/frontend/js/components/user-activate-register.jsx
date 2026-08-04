@@ -5,6 +5,7 @@ import OLRow from '@/shared/components/ol/ol-row'
 import OLCol from '@/shared/components/ol/ol-col'
 import OLCard from '@/shared/components/ol/ol-card'
 import Notification from '@/shared/components/notification'
+import UserManagement from './user-management'
 
 function UserActivateRegister() {
   const [emails, setEmails] = useState([])
@@ -13,31 +14,38 @@ function UserActivateRegister() {
   const [registrationSuccess, setRegistrationSuccess] = useState(false)
 
   return (
-    <OLRow>
-      <OLCol>
-        <OLCard>
-          <div className="page-header">
-            <h1>Register new users</h1>
-          </div>
-          <RegisterForm
-            setRegistrationSuccess={setRegistrationSuccess}
-            setEmails={setEmails}
-            setRegisterError={setRegisterError}
-            setFailedEmails={setFailedEmails}
-          />
-          {registerError ? (
-            <UserActivateError failedEmails={failedEmails} />
-          ) : null}
-          {registrationSuccess ? (
-            <>
-              <SuccessfulRegistrationMessage />
-              <hr />
-              <DisplayEmailsList emails={emails} />
-            </>
-          ) : null}
-        </OLCard>
-      </OLCol>
-    </OLRow>
+    <>
+      <OLRow>
+        <OLCol>
+          <OLCard>
+            <div className="page-header">
+              <h1>Register new users</h1>
+            </div>
+            <RegisterForm
+              setRegistrationSuccess={setRegistrationSuccess}
+              setEmails={setEmails}
+              setRegisterError={setRegisterError}
+              setFailedEmails={setFailedEmails}
+            />
+            {registerError ? (
+              <UserActivateError failedEmails={failedEmails} />
+            ) : null}
+            {registrationSuccess ? (
+              <>
+                <SuccessfulRegistrationMessage />
+                <hr />
+                <DisplayEmailsList emails={emails} />
+              </>
+            ) : null}
+          </OLCard>
+        </OLCol>
+      </OLRow>
+      <OLRow className="mt-4">
+        <OLCol>
+          <UserManagement />
+        </OLCol>
+      </OLRow>
+    </>
   )
 }
 

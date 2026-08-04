@@ -10,8 +10,12 @@ html.fixed-size-document {
 }
 
 body {
+  --bs-heading-color: var(--content-primary-themed);
+
   position: relative;
   min-height: 100%;
+  color: var(--content-primary-themed);
+  background-color: var(--bg-primary-themed);
 }
 
 .content {
@@ -29,7 +33,7 @@ body {
 }
 
 .content-alt {
-  background-color: $bg-light-secondary;
+  background-color: var(--bg-secondary-themed);
 }
 
 // Page header/separator

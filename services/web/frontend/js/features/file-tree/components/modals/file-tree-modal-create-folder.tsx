@@ -51,7 +51,7 @@ function FileTreeModalCreateFolder() {
   }
 
   return (
-    <OLModal show onHide={handleHide}>
+    <OLModal show onHide={handleHide} className="ide-dark-modal">
       <OLModalHeader>
         <OLModalTitle>{t('new_folder')}</OLModalTitle>
       </OLModalHeader>

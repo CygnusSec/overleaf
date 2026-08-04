@@ -10,7 +10,7 @@ ENV TEXMFVAR=/var/lib/overleaf/tmp/texmf-var
 
 # Update to ensure dependencies are updated
 # ------------------------------------------
-ENV REBUILT_AFTER="2026-06-05"
+ENV REBUILT_AFTER="2026-07-28"
 
 # Install dependencies
 # --------------------
@@ -21,10 +21,13 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # Enable caching: https://docs.docker.com/reference/dockerfile/#example-cache-apt-packages
 &&  rm -f /etc/apt/apt.conf.d/docker-clean && echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache \
 &&  apt-get update \
+&&  echo "ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true" | debconf-set-selections \
 &&  apt-get install -y \
       unattended-upgrades \
       build-essential wget net-tools unzip time poppler-utils optipng strace nginx git python3 python-is-python3 zlib1g-dev libpcre3-dev gettext-base libwww-perl ca-certificates curl gnupg \
+      fontconfig fonts-dejavu fonts-freefont-ttf ttf-mscorefonts-installer \
       qpdf \
+&&  fc-cache -fv \
 # upgrade base-image, batch all the upgrades together, rather than installing them on-by-one (which is slow!)
 &&  unattended-upgrade --verbose --no-minimal-upgrade-steps \
 # install Node.js https://github.com/nodesource/distributions#nodejs
@@ -63,7 +66,7 @@ RUN mkdir /install-tl-unx \
 &&  echo "tlpdbopt_autobackup 0" >> /install-tl-unx/texlive.profile \
 &&  echo "tlpdbopt_install_docfiles 0" >> /install-tl-unx/texlive.profile \
 &&  echo "tlpdbopt_install_srcfiles 0" >> /install-tl-unx/texlive.profile \
-&&  echo "selected_scheme scheme-basic" >> /install-tl-unx/texlive.profile \
+&&  echo "selected_scheme scheme-full" >> /install-tl-unx/texlive.profile \
     \
 &&  /install-tl-unx/install-tl \
       -profile /install-tl-unx/texlive.profile \

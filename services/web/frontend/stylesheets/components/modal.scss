@@ -3,12 +3,63 @@
 }
 
 .modal {
-  // Until we add a dark modal version, all core components in modals should use light theme
+  // Default component tokens; dark mode overrides them below.
   @include light-dropdown-menu;
   @include form-check-light;
   @include light-notification;
   @include light-input;
   @include light-buttons;
+}
+
+@include theme('default') {
+  // Modals are rendered in a portal, so page-level dark surfaces do not
+  // automatically style their Bootstrap content. Apply the dark component
+  // tokens to every modal to keep titles, labels, controls and actions
+  // readable across the project list, account pages and editor.
+  .modal {
+    @include dark-dropdown-menu;
+    @include form-check-dark;
+    @include dark-notification;
+    @include dark-input;
+    @include dark-buttons;
+
+    // Legacy modal content can still use light-theme semantic tokens.
+    // Remap them locally so the complete dialog remains readable in dark mode.
+    --content-primary: var(--content-primary-dark);
+    --content-secondary: var(--content-secondary-dark);
+    --content-disabled: var(--content-disabled-dark);
+    --content-placeholder: var(--content-placeholder-dark);
+    --bg-light-primary: var(--bg-dark-primary);
+    --bg-light-secondary: var(--bg-dark-secondary);
+    --bg-light-tertiary: var(--bg-dark-tertiary);
+    --border-primary: var(--border-primary-dark);
+    --border-divider: var(--border-divider-dark);
+    --bs-heading-color: var(--content-primary-dark);
+    --bs-modal-color: var(--content-primary-dark);
+    --bs-modal-bg: var(--bg-dark-primary);
+    --bs-modal-border-color: var(--border-primary-dark);
+    --bs-modal-header-border-color: var(--border-divider-dark);
+    --bs-modal-footer-border-color: var(--border-divider-dark);
+
+    .modal-content {
+      color: var(--content-primary-dark);
+      background-color: var(--bg-dark-primary);
+    }
+
+    .modal-header,
+    .modal-footer {
+      background-color: var(--bg-dark-primary);
+    }
+
+    .modal-title,
+    .form-label {
+      color: var(--content-primary-dark);
+    }
+
+    .btn-close {
+      filter: invert(1) grayscale(100%) brightness(200%);
+    }
+  }
 }
 
 @include media-breakpoint-up(sm) {

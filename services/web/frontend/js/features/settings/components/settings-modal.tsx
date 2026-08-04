@@ -34,6 +34,7 @@ const SettingsModal = () => {
       show={show}
       onHide={() => setShow(false)}
       size="lg"
+      className="ide-settings-modal"
       backdropClassName={
         activeTab === 'appearance'
           ? 'ide-settings-modal-transparent-backdrop'

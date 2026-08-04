@@ -26,7 +26,9 @@
 }
 
 .card {
-  --bs-card-bg: var(--white);
+  --bs-card-bg: var(--bg-primary-themed);
+  --bs-card-color: var(--content-primary-themed);
+  --bs-card-border-color: var(--border-divider-themed);
   --bs-card-border-width: 0;
   --bs-card-border-radius: var(--border-radius-base);
   --bs-card-spacer-x: var(--spacing-08);

@@ -4,6 +4,7 @@ doctype html
 html(
 	lang=currentLngCode || 'en'
 	class=fixedSizeDocument ? 'fixed-size-document' : undefined
+	data-theme='light'
 )
 	- metadata = metadata || {}
 	- let isWebsiteRedesign = false
@@ -18,6 +19,44 @@ html(
 
 	head
 		include ./_metadata.pug
+
+		//- Apply the persisted theme before CSS loads to avoid a light-mode flash.
+		script(nonce=scriptNonce).
+			(() => {
+				const mediaWatcher = window.matchMedia?.(
+					'(prefers-color-scheme: dark)'
+				)
+				const applyTheme = preference => {
+					const prefersDark = mediaWatcher?.matches ?? true
+					const isDark =
+						preference === 'dark' ||
+						(preference === 'system' && prefersDark)
+					const theme = isDark ? 'default' : 'light'
+					document.documentElement.dataset.theme = theme
+					if (document.body) {
+						document.body.dataset.theme = theme
+					}
+					document.documentElement.style.colorScheme = isDark ? 'dark' : 'light'
+				}
+
+				try {
+					const preference =
+						localStorage.getItem('overleaf.overallTheme') || 'system'
+					applyTheme(preference)
+
+					mediaWatcher?.addEventListener('change', () => {
+						if (
+							(localStorage.getItem('overleaf.overallTheme') || 'system') ===
+							'system'
+						) {
+							applyTheme('system')
+						}
+					})
+				} catch {
+					document.documentElement.dataset.theme = 'light'
+					document.documentElement.style.colorScheme = 'light'
+				}
+			})()
 
 		//- Stylesheet
 		link(rel='stylesheet' href=buildCssPath() id='main-stylesheet')
@@ -107,6 +146,10 @@ html(
 		}
 		data-theme='light'
 	)
+		script(nonce=scriptNonce).
+			document.body.dataset.theme =
+				document.documentElement.dataset.theme || 'light'
+
 		if settings.recaptcha && settings.recaptcha.siteKeyV3
 			script(
 				type='text/javascript'

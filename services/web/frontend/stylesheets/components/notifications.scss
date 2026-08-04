@@ -64,14 +64,12 @@
     --notification-ai-paywall-color: var(--content-primary-dark);
     --notification-ai-paywall-border-color: var(--blue-30);
 
-    .project-ds-nav-page {
-      .notification {
-        @include dark-notification;
-        @include dark-bg;
+    .notification {
+      @include dark-notification;
+      @include dark-bg;
 
-        .btn {
-          @include dark-buttons;
-        }
+      .btn {
+        @include dark-buttons;
       }
     }
   }

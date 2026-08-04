@@ -30,11 +30,9 @@
   @include light-table;
 
   @include theme('default') {
-    .project-ds-nav-page {
-      .table,
-      .table-container {
-        @include dark-table;
-      }
+    .table,
+    .table-container {
+      @include dark-table;
     }
   }
 }

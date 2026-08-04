@@ -37,8 +37,8 @@
 }
 
 @include theme('default') {
-  .ide-redesign-main,
-  .project-ds-nav-page,
+  .dropdown-menu,
+  .dropdown,
   // Codemirror tooltips are rendered outside of the main app container
   .cm-tooltip .dropdown-menu,
   .cm-tooltip .dropdown,

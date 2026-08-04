@@ -28,6 +28,17 @@ const intFromEnv = function (name, defaultValue) {
   return parseInt(process.env[name], 10) || defaultValue
 }
 
+const jsonArrayFromEnv = function (name) {
+  if (!process.env[name]) return []
+  try {
+    const value = JSON.parse(process.env[name])
+    if (!Array.isArray(value)) throw new Error('expected a JSON array')
+    return value
+  } catch (error) {
+    throw new Error(`Invalid ${name}: ${error.message}`)
+  }
+}
+
 const defaultTextExtensions = [
   'tex',
   'latex',
@@ -1055,8 +1066,18 @@ module.exports = {
     labsExperiments: [],
     integrationLinkingWidgets: [],
     referenceLinkingWidgets: [],
-    importProjectFromGithubModalWrapper: [],
-    importProjectFromGithubMenu: [],
+    importProjectFromGithubModalWrapper: [
+      Path.resolve(
+        __dirname,
+        '../modules/git-sync/frontend/js/github-import-modal.tsx'
+      ),
+    ],
+    importProjectFromGithubMenu: [
+      Path.resolve(
+        __dirname,
+        '../modules/git-sync/frontend/js/github-import-menu.tsx'
+      ),
+    ],
     editorLeftMenuSync: [],
     editorLeftMenuManageTemplate: [],
     menubarExtraComponents: [],
@@ -1098,13 +1119,29 @@ module.exports = {
         '../modules/full-project-search/frontend/js/components/full-project-search.tsx'
       ),
     ],
-    integrationPanelComponents: [],
+    integrationPanelComponents: [
+      Path.resolve(
+        __dirname,
+        '../modules/git-sync/frontend/js/git-sync-panel.tsx'
+      ),
+    ],
+    accountSettingsSections: [
+      Path.resolve(
+        __dirname,
+        '../modules/ai-assistant/frontend/js/ai-connections-settings.tsx'
+      ),
+    ],
     referenceSearchSetting: [],
     settingsModalEditorTabSections: [],
     settingsModalSpellcheckSections: [],
     editorFloatingMenuActions: [],
     referenceIndices: [],
-    railEntries: [],
+    railEntries: [
+      Path.resolve(
+        __dirname,
+        '../modules/ai-assistant/frontend/js/ai-assistant-rail-entry.tsx'
+      ),
+    ],
     railPopovers: [],
     railActions: [],
     railModals: [],
@@ -1112,6 +1149,10 @@ module.exports = {
 
   moduleImportSequence: [
     'history-v1',
+    'backup-manager',
+    'git-sync',
+    'ai-assistant',
+    'track-changes',
     'launchpad',
     'server-ce-scripts',
     'user-activate',
@@ -1143,6 +1184,27 @@ module.exports = {
   },
 
   enablePandocConversions: process.env.ENABLE_PANDOC_CONVERSIONS === 'true',
+  useLocalPandocConversions:
+    process.env.LOCAL_PANDOC_CONVERSIONS === 'true',
+  enableGitSync: process.env.GIT_INTEGRATION_ENABLED === 'true',
+  backupManagerEnabled: process.env.BACKUP_MANAGER_ENABLED === 'true',
+  backupStoragePath:
+    process.env.BACKUP_STORAGE_PATH || '/var/lib/overleaf/backups',
+  backupEncryptionPassphrase: process.env.BACKUP_ENCRYPTION_PASSPHRASE,
+  gitIntegrationEncryptionKey: process.env.GIT_INTEGRATION_ENCRYPTION_KEY,
+  githubSyncClientId: process.env.GITHUB_SYNC_CLIENT_ID,
+  githubSyncClientSecret: process.env.GITHUB_SYNC_CLIENT_SECRET,
+  enableAiAssistant: process.env.AI_INTEGRATION_ENABLED === 'true',
+  aiCredentialEncryptionKey: process.env.AI_CREDENTIAL_ENCRYPTION_KEY,
+  aiProvidersConfig: jsonArrayFromEnv('AI_PROVIDERS_CONFIG'),
+  aiRequestTimeoutMs: intFromEnv('AI_REQUEST_TIMEOUT_MS', 120000),
+  aiMaxDocumentChars: intFromEnv('AI_MAX_DOCUMENT_CHARS', 200000),
+  enableCodexLogin: process.env.CODEX_LOGIN_ENABLED === 'true',
+  aiCodexExecutable: process.env.CODEX_EXECUTABLE || 'codex',
+  aiCodexDataPath:
+    process.env.CODEX_USER_DATA_PATH || '/var/lib/overleaf/codex',
+  aiCodexDefaultModel: process.env.CODEX_DEFAULT_MODEL || 'gpt-5.6-sol',
+  aiCodexModels: jsonArrayFromEnv('CODEX_MODELS'),
 }
 
 module.exports.mergeWith = function (overrides) {

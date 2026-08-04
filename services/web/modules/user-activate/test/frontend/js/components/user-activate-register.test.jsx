@@ -7,6 +7,11 @@ import { TPDS_SYNCED } from '../../../../../dropbox/test/frontend/components/dro
 describe('UserActivateRegister', function () {
   beforeEach(function () {
     fetchMock.removeRoutes().clearHistory()
+    fetchMock.get('glob:/admin/users*', {
+      users: [],
+      stats: { total: 0, active: 0, suspended: 0 },
+      pagination: { page: 1, pages: 1, total: 0, limit: 25 },
+    })
   })
   afterEach(function () {
     fetchMock.removeRoutes().clearHistory()

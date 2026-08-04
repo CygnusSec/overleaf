@@ -115,6 +115,114 @@
   vertical-align: super;
 }
 
+.admin-user-management {
+  margin-bottom: var(--spacing-08);
+
+  .card-body {
+    padding: var(--spacing-08);
+  }
+}
+
+.admin-user-management-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--spacing-06);
+  margin-bottom: var(--spacing-07);
+
+  h2 {
+    margin-bottom: var(--spacing-02);
+  }
+}
+
+.admin-user-management-stats {
+  color: var(--content-secondary-themed);
+  margin: 0;
+}
+
+.admin-user-search {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-03);
+  width: min(100%, 460px);
+
+  .form-control {
+    min-width: 220px;
+  }
+}
+
+.admin-user-table {
+  min-width: 980px;
+
+  th:last-child,
+  td:last-child {
+    width: 430px;
+  }
+}
+
+.admin-user-name {
+  color: var(--content-primary-themed);
+  font-weight: 600;
+}
+
+.admin-user-email {
+  color: var(--content-secondary-themed);
+  overflow-wrap: anywhere;
+}
+
+.admin-user-status {
+  display: inline-flex;
+  padding: var(--spacing-01) var(--spacing-03);
+  border-radius: var(--border-radius-full);
+  font-size: var(--font-size-01);
+  font-weight: 600;
+
+  &.is-active {
+    color: var(--content-positive-themed);
+    background-color: var(--bg-accent-03);
+  }
+
+  &.is-suspended {
+    color: var(--content-warning-themed);
+    background-color: var(--bg-warning-03);
+  }
+}
+
+.admin-user-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--spacing-02);
+}
+
+.admin-user-edit-fields {
+  display: grid;
+  gap: var(--spacing-02);
+}
+
+.admin-user-pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--content-secondary-themed);
+  padding-top: var(--spacing-05);
+
+  > div {
+    display: flex;
+    gap: var(--spacing-02);
+  }
+}
+
+@include media-breakpoint-down(md) {
+  .admin-user-management-header {
+    flex-direction: column;
+  }
+
+  .admin-user-search {
+    width: 100%;
+  }
+}
+
 .privileges-matrix-container {
   overflow-x: auto;
   margin-top: var(--spacing-04);

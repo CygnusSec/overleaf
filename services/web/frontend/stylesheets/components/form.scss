@@ -118,14 +118,11 @@
 }
 
 @include theme('default') {
-  .ide-redesign-main,
-  .project-ds-nav-page {
-    @include form-check-dark;
+  @include form-check-dark;
 
-    .form-control,
-    .form-control-wrapper {
-      @include dark-input;
-    }
+  .form-control,
+  .form-control-wrapper {
+    @include dark-input;
   }
 }
 
@@ -297,7 +294,7 @@
 
 .form-text {
   .form-control[disabled] ~ & {
-    color: var(--content-disabled);
+    color: var(--content-disabled-themed);
   }
 
   .form-text-inner {
@@ -316,8 +313,10 @@
 }
 
 .form-label {
+  color: var(--content-primary-themed);
+
   &:has(+ .form-control[disabled], + .form-control-wrapper-disabled) {
-    color: var(--content-disabled);
+    color: var(--content-disabled-themed);
   }
 }
 
@@ -332,7 +331,7 @@
     .form-control-start-icon,
     .form-control-end-icon {
       & > * {
-        color: var(--content-disabled);
+        color: var(--content-disabled-themed);
       }
     }
   }
@@ -414,9 +413,34 @@
   }
 }
 
+@include theme('default') {
+  .form-select {
+    color: var(--content-primary-dark);
+    background-color: var(--bg-dark-primary);
+    border-color: var(--border-primary-dark);
+
+    &:focus,
+    &:invalid:focus,
+    &.is-invalid:focus,
+    &:focus-visible,
+    &:invalid:focus-visible,
+    &.is-invalid:focus-visible {
+      color: var(--content-primary-dark);
+      background-color: var(--bg-dark-primary);
+      border-color: var(--border-active-dark);
+    }
+
+    option,
+    optgroup {
+      color: var(--content-primary-dark);
+      background-color: var(--bg-dark-primary);
+    }
+  }
+}
+
 .website-redesign {
   label {
-    color: $form-text-color;
+    color: var(--content-primary-themed);
     display: inline-block;
     margin-bottom: var(--spacing-02);
     font-weight: bold;
@@ -466,7 +490,13 @@ input[type='range'] {
 }
 
 input.form-control[type='text'],
-input.form-control[type='search'] {
+input.form-control[type='search'],
+input.form-control[type='email'],
+input.form-control[type='password'],
+input.form-control[type='url'],
+input.form-control[type='tel'],
+input.form-control[type='number'],
+textarea.form-control {
   color: var(--input-field-color);
   background-color: var(--input-field-bg);
   border-color: var(--input-field-border-color);
