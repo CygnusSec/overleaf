@@ -48,6 +48,11 @@ export default {
       AuthorizationMiddleware.ensureUserCanWriteProjectContent,
       EditorHttpController.moveEntity
     )
+    webRouter.post(
+      '/project/:Project_id/:entity_type/:entity_id/copy',
+      AuthorizationMiddleware.ensureUserCanWriteProjectContent,
+      EditorHttpController.copyEntity
+    )
 
     webRouter.delete(
       '/project/:Project_id/file/:entity_id',

@@ -3,7 +3,7 @@ import AuthenticationController from '../../../../app/src/Features/Authenticatio
 import AuthorizationMiddleware from '../../../../app/src/Features/Authorization/AuthorizationMiddleware.mjs'
 import RateLimiterMiddleware from '../../../../app/src/Features/Security/RateLimiterMiddleware.mjs'
 import { RateLimiter } from '../../../../app/src/infrastructure/RateLimiter.mjs'
-import AiAssistantController from './AiAssistantController.mjs'
+import * as AiAssistantController from './AiAssistantController.mjs'
 
 const aiRequestRateLimiter = new RateLimiter('ai-assistant-request', {
   points: 30,

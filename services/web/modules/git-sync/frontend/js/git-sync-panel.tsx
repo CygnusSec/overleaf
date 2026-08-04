@@ -132,7 +132,7 @@ export default function GitSyncPanel() {
   if (!enabled) return null
   if (permissionsLevel !== 'owner') {
     return (
-      <div className="p-3">
+      <div className="github-sync-panel p-3">
         <h3 className="h5">{t('github')}</h3>
         <p>{t('only_project_owner_can_link_github')}</p>
       </div>
@@ -398,7 +398,7 @@ export default function GitSyncPanel() {
   }
 
   return (
-    <div className="p-3">
+    <div className="github-sync-panel p-3">
       <h3 className="h5">{t('github')}</h3>
       <p className="text-muted github-sync-panel-description">
         Link this project to GitHub, then pull or push changes when you choose.

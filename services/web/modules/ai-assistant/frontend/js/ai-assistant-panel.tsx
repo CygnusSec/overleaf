@@ -89,13 +89,26 @@ export default function AiAssistantPanel() {
     setError(undefined)
     setProposal(undefined)
     setMessages([])
-    try {
-      const result = await getJSON<{
+    const [connectionsResult, conversationResult] = await Promise.allSettled([
+      getJSON<{
         personal: Connection[]
         shared: Connection[]
         codex?: CodexStatus
-      }>('/api/ai/connections')
-      if (requestId !== loadRequestRef.current) return
+      }>('/api/ai/connections'),
+      getJSON<{ messages: ChatMessage[] }>(
+        `/project/${projectId}/ai/conversation`
+      ),
+    ])
+    if (requestId !== loadRequestRef.current) return
+
+    if (conversationResult.status === 'fulfilled') {
+      setMessages(conversationResult.value.messages)
+    } else {
+      setMessages([])
+    }
+
+    if (connectionsResult.status === 'fulfilled') {
+      const result = connectionsResult.value
       const codex = result.codex?.connected
         ? [
             {
@@ -115,32 +128,28 @@ export default function AiAssistantPanel() {
       setConnections(items)
       setConnectionId(items[0]?.id || '')
       setModel(items[0]?.model || '')
-      try {
-        const conversation = await getJSON<{ messages: ChatMessage[] }>(
-          `/project/${projectId}/ai/conversation`
-        )
-        if (requestId !== loadRequestRef.current) return
-        setMessages(conversation.messages)
-      } catch {
-        // A missing/unavailable history endpoint must not hide valid AI
-        // connections, including an already authenticated Codex account.
-        if (requestId !== loadRequestRef.current) return
-        setMessages([])
-      }
-    } catch (err) {
-      if (requestId !== loadRequestRef.current) return
+    } else {
       setConnections([])
-      setMessages([])
+      const err = connectionsResult.reason
       setError(
         err instanceof FetchError
           ? err.getUserFacingMessage()
           : 'Could not load AI connections.'
       )
-    } finally {
-      if (requestId === loadRequestRef.current) {
-        setLoading(false)
-      }
     }
+
+    if (
+      conversationResult.status === 'rejected' &&
+      connectionsResult.status === 'fulfilled'
+    ) {
+      const err = conversationResult.reason
+      setError(
+        err instanceof FetchError
+          ? `Could not load chat history: ${err.getUserFacingMessage()}`
+          : 'Could not load chat history. Please reload the project.'
+      )
+    }
+    setLoading(false)
   }, [enabled, projectId])
 
   useEffect(() => {

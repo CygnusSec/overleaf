@@ -14,6 +14,7 @@ import FileTreeError from './file-tree-error'
 import { useDroppable } from '../contexts/file-tree-draggable'
 import { useFileTreeSocketListener } from '../hooks/file-tree-socket-listener'
 import FileTreeModalCreateFile from './modals/file-tree-modal-create-file'
+import FileTreeModalCopy from './modals/file-tree-modal-copy'
 import FileTreeInner from './file-tree-inner'
 import { useDragLayer } from 'react-dnd'
 import classnames from 'classnames'
@@ -106,6 +107,7 @@ const FileTreeRoot = React.memo<{
           <FileTreeModalDelete />
           <FileTreeModalCreateFile />
           <FileTreeModalCreateFolder />
+          <FileTreeModalCopy />
           <FileTreeModalError />
         </FileTreeContext>
       )}

@@ -21,8 +21,12 @@
 }
 
 .integrations-panel {
+  display: flex;
+  flex-direction: column;
   background-color: var(--integrations-panel-bg);
   height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .integrations-panel-card-button {

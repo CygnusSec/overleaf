@@ -1,4 +1,5 @@
 import Settings from '@overleaf/settings'
+import logger from '@overleaf/logger'
 import SessionManager from '../../../../app/src/Features/Authentication/SessionManager.mjs'
 import EditorController from '../../../../app/src/Features/Editor/EditorController.mjs'
 import ProjectGetter from '../../../../app/src/Features/Project/ProjectGetter.mjs'
@@ -84,50 +85,107 @@ function codexModels() {
 }
 
 function publicMessages(conversation) {
-  return (conversation?.messages || []).map(message => ({
-    id: message._id.toString(),
-    role: message.role,
-    content: message.content,
-    mode: message.mode,
-    createdAt: message.createdAt,
-  }))
+  const conversationId = conversation?._id
+    ? String(conversation._id)
+    : 'legacy-conversation'
+  return (conversation?.messages || [])
+    .filter(message => message && typeof message.content === 'string')
+    .map((message, index) => ({
+      id: message._id
+        ? String(message._id)
+        : `${conversationId}-message-${index}`,
+      role: message.role === 'assistant' ? 'assistant' : 'user',
+      content: message.content,
+      mode: message.mode === 'edit' ? 'edit' : 'ask',
+      createdAt:
+        message.createdAt ||
+        conversation?.updatedAt ||
+        conversation?.createdAt ||
+        new Date(0),
+    }))
+}
+
+function findLatestConversation(query) {
+  return AiConversation.findOne(query)
+    .sort({ updatedAt: -1, _id: -1 })
+    .lean()
+    .exec()
 }
 
 async function appendConversationMessages(query, messages) {
+  const now = new Date()
   const update = {
     $push: {
       messages: {
-        $each: messages,
+        $each: messages.map(message => ({ ...message, createdAt: now })),
         $slice: -100,
       },
     },
-    $set: { updatedAt: new Date() },
-    $setOnInsert: { createdAt: new Date() },
+    $set: { updatedAt: now },
+    $setOnInsert: { createdAt: now },
   }
+  const existingConversation = await findLatestConversation(query)
+  let conversationId = existingConversation?._id
   try {
-    return await AiConversation.findOneAndUpdate(query, update, {
-      upsert: true,
-      new: true,
-    })
+    const writeResult = await AiConversation.updateOne(
+      conversationId ? { _id: conversationId } : query,
+      update,
+      { upsert: !conversationId }
+    ).exec()
+    if (!writeResult.acknowledged) {
+      throw new Error('MongoDB did not acknowledge the conversation write')
+    }
+    conversationId ||= writeResult.upsertedId
   } catch (error) {
     // Two browser tabs can create the same project conversation concurrently.
     if (error?.code !== 11000) throw error
-    return await AiConversation.findOneAndUpdate(query, update, { new: true })
+    const latestConversation = await findLatestConversation(query)
+    if (!latestConversation?._id) throw error
+    conversationId = latestConversation._id
+    const retryResult = await AiConversation.updateOne(
+      { _id: conversationId },
+      update
+    ).exec()
+    if (!retryResult.acknowledged || retryResult.matchedCount !== 1) {
+      throw new Error('Could not retry the conversation write')
+    }
   }
+  const storedConversation = conversationId
+    ? await AiConversation.findById(conversationId).lean().exec()
+    : await findLatestConversation(query)
+  if (!storedConversation) {
+    throw new Error('Conversation was not found after a successful write')
+  }
+  return storedConversation
 }
 
 export async function getConversation(req, res) {
   if (!requireEnabled(res)) return
-  const conversation = await AiConversation.findOne({
-    userId: userId(req),
-    projectId: req.params.project_id,
-  })
-  res.json({ messages: publicMessages(conversation) })
+  const actorId = userId(req)
+  const projectId = req.params.project_id
+  try {
+    // Use a plain object so legacy embedded messages are not hydrated against
+    // the current schema before they can be normalized by publicMessages().
+    const conversation = await findLatestConversation({
+      userId: actorId,
+      projectId,
+    })
+    res.json({ messages: publicMessages(conversation) })
+  } catch (error) {
+    logger.error(
+      { err: error, userId: actorId, projectId },
+      'Failed to load AI conversation'
+    )
+    res.status(500).json({
+      code: 'AI_CONVERSATION_READ_FAILED',
+      message: 'Could not load stored chat history',
+    })
+  }
 }
 
 export async function clearConversation(req, res) {
   if (!requireEnabled(res)) return
-  await AiConversation.deleteOne({
+  await AiConversation.deleteMany({
     userId: userId(req),
     projectId: req.params.project_id,
   })
@@ -413,7 +471,7 @@ export async function run(req, res) {
     }
   }
   let result
-  const conversation = await AiConversation.findOne({
+  const conversation = await findLatestConversation({
     userId: userId(req),
     projectId: req.params.project_id,
   })
@@ -483,13 +541,29 @@ export async function run(req, res) {
       ? result.answer
       : result.explanation || 'An edit proposal was generated.'
   ).slice(0, 50000)
-  const updatedConversation = await appendConversationMessages(
-    { userId: userId(req), projectId: req.params.project_id },
-    [
-      { role: 'user', content: prompt, mode },
-      { role: 'assistant', content: assistantContent, mode },
-    ]
-  )
+  let updatedConversation
+  try {
+    updatedConversation = await appendConversationMessages(
+      { userId: userId(req), projectId: req.params.project_id },
+      [
+        { role: 'user', content: prompt, mode },
+        { role: 'assistant', content: assistantContent, mode },
+      ]
+    )
+  } catch (error) {
+    logger.error(
+      {
+        err: error,
+        userId: userId(req),
+        projectId: req.params.project_id,
+      },
+      'Failed to persist AI conversation'
+    )
+    return res.status(500).json({
+      code: 'AI_CONVERSATION_WRITE_FAILED',
+      message: 'The AI response could not be saved to chat history',
+    })
+  }
   res.json({
     ...result,
     messages: publicMessages(updatedConversation).slice(-2),
@@ -655,6 +729,8 @@ export default {
   beginCodexLogin,
   getCodexLoginResult,
   disconnectCodex,
+  getConversation,
+  clearConversation,
   run,
   applyProjectChanges,
   adminPage,
