@@ -84,13 +84,24 @@ function codexModels() {
 }
 
 function publicMessages(conversation) {
-  return (conversation?.messages || []).map(message => ({
-    id: message._id.toString(),
-    role: message.role,
-    content: message.content,
-    mode: message.mode,
-    createdAt: message.createdAt,
-  }))
+  const conversationId = conversation?._id
+    ? String(conversation._id)
+    : 'legacy-conversation'
+  return (conversation?.messages || [])
+    .filter(message => message && typeof message.content === 'string')
+    .map((message, index) => ({
+      id: message._id
+        ? String(message._id)
+        : `${conversationId}-message-${index}`,
+      role: message.role === 'assistant' ? 'assistant' : 'user',
+      content: message.content,
+      mode: message.mode === 'edit' ? 'edit' : 'ask',
+      createdAt:
+        message.createdAt ||
+        conversation?.updatedAt ||
+        conversation?.createdAt ||
+        new Date(0),
+    }))
 }
 
 async function appendConversationMessages(query, messages) {
