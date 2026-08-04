@@ -109,6 +109,38 @@ const EditorController = {
     )
   },
 
+  copyFile(
+    projectId,
+    folderId,
+    sourceFileRef,
+    fileName,
+    source,
+    userId,
+    callback
+  ) {
+    ProjectEntityUpdateHandler.copyFile(
+      projectId,
+      folderId,
+      sourceFileRef,
+      fileName,
+      userId,
+      source,
+      (err, fileRef, targetFolderId) => {
+        if (err) return callback(err)
+        EditorRealTimeController.emitToRoom(
+          projectId,
+          'reciveNewFile',
+          targetFolderId,
+          fileRef,
+          source,
+          fileRef.linkedFileData,
+          userId
+        )
+        callback(null, fileRef)
+      }
+    )
+  },
+
   appendToDoc(projectId, docId, docLines, source, userId, callback) {
     ProjectEntityUpdateHandler.appendToDoc(
       projectId,
@@ -696,6 +728,7 @@ EditorController.promises = {
   addDoc: promisify(EditorController.addDoc),
   addDocWithRanges: promisify(EditorController.addDocWithRanges),
   addFile: promisify(EditorController.addFile),
+  copyFile: promisify(EditorController.copyFile),
   appendToDoc: promisify(EditorController.appendToDoc),
   upsertDoc: promisify(EditorController.upsertDoc),
   upsertFile: promisify(EditorController.upsertFile),

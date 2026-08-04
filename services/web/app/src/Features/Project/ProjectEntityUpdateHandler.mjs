@@ -5,6 +5,7 @@ import Settings from '@overleaf/settings'
 import Path from 'node:path'
 import fs from 'node:fs'
 import { Doc } from '../../models/Doc.mjs'
+import { File } from '../../models/File.mjs'
 import DocstoreManager from '../../Features/Docstore/DocstoreManager.mjs'
 import DocumentUpdaterHandler from '../../Features/DocumentUpdater/DocumentUpdaterHandler.mjs'
 import Errors from '../Errors/Errors.js'
@@ -382,6 +383,51 @@ const addFile = wrapWithLock({
     return { fileRef, folderId, createdBlob }
   },
 })
+
+const copyFile = wrapWithLock(
+  async function (
+    projectId,
+    folderId,
+    sourceFileRef,
+    fileName,
+    userId,
+    source
+  ) {
+    if (!SafePath.isCleanFilename(fileName)) {
+      throw new Errors.InvalidNameError('invalid element name')
+    }
+    const fileRef = new File({
+      name: fileName,
+      hash: sourceFileRef.hash,
+      linkedFileData: _.cloneDeep(sourceFileRef.linkedFileData),
+    })
+    const { result, project } =
+      await ProjectEntityUpdateHandler._addFileAndSendToTpds(
+        projectId,
+        folderId,
+        fileRef,
+        userId
+      )
+    const projectHistoryId = project.overleaf?.history?.id
+    await DocumentUpdaterHandler.promises.updateProjectStructure(
+      projectId,
+      projectHistoryId,
+      userId,
+      {
+        newFiles: [
+          {
+            createdBlob: false,
+            file: fileRef,
+            path: result?.path?.fileSystem,
+          },
+        ],
+        newProject: project,
+      },
+      source
+    )
+    return { fileRef, folderId }
+  }
+)
 
 const upsertDoc = wrapWithLock(
   async function (projectId, folderId, docName, docLines, source, userId) {
@@ -1183,6 +1229,8 @@ const ProjectEntityUpdateHandler = {
     'createdBlob',
   ]),
 
+  copyFile: callbackifyMultiResult(copyFile, ['fileRef', 'folderId']),
+
   addFolder: callbackifyMultiResult(addFolder, ['folder', 'parentFolderId']),
 
   convertDocToFile: callbackify(convertDocToFile),
@@ -1246,6 +1294,7 @@ const ProjectEntityUpdateHandler = {
     addDoc,
     addDocWithRanges,
     addFile,
+    copyFile,
     addFolder,
     convertDocToFile,
     deleteEntity,

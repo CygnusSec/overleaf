@@ -11,6 +11,8 @@ import Errors from '../Errors/Errors.js'
 import { expressify } from '@overleaf/promise-utils'
 import Settings from '@overleaf/settings'
 import CollaboratorsGetter from '../Collaborators/CollaboratorsGetter.mjs'
+import DocstoreManager from '../Docstore/DocstoreManager.mjs'
+import SafePath from '../Project/SafePath.mjs'
 import { z, zz, parseReq } from '../../infrastructure/Validation.mjs'
 
 const ProjectAccess = CollaboratorsGetter.ProjectAccess
@@ -21,6 +23,7 @@ export default {
   addFolder: expressify(addFolder),
   renameEntity: expressify(renameEntity),
   moveEntity: expressify(moveEntity),
+  copyEntity: expressify(copyEntity),
   deleteDoc: expressify(deleteDoc),
   deleteFile: expressify(deleteFile),
   deleteFolder: expressify(deleteFolder),
@@ -230,6 +233,157 @@ async function moveEntity(req, res, next) {
     source
   )
   res.sendStatus(204)
+}
+
+function findFolder(folder, folderId) {
+  if (String(folder._id) === String(folderId)) return folder
+  for (const child of folder.folders || []) {
+    const found = findFolder(child, folderId)
+    if (found) return found
+  }
+  return null
+}
+
+function findEntity(folder, entityId, entityType) {
+  const collection =
+    entityType === 'folder'
+      ? folder.folders
+      : entityType === 'doc'
+        ? folder.docs
+        : folder.fileRefs
+  const entity = (collection || []).find(
+    item => String(item._id) === String(entityId)
+  )
+  if (entity) return entity
+  for (const child of folder.folders || []) {
+    const found = findEntity(child, entityId, entityType)
+    if (found) return found
+  }
+  return null
+}
+
+function folderHasName(folder, name) {
+  return [
+    ...(folder.folders || []),
+    ...(folder.docs || []),
+    ...(folder.fileRefs || []),
+  ].some(item => item.name === name)
+}
+
+async function copyEntityTree(
+  projectId,
+  entityType,
+  entity,
+  targetFolderId,
+  name,
+  userId
+) {
+  if (entityType === 'doc') {
+    const doc = await DocstoreManager.promises.getDoc(projectId, entity._id, {
+      peek: true,
+    })
+    return await EditorController.promises.addDocWithRanges(
+      projectId,
+      targetFolderId,
+      name,
+      doc.lines,
+      doc.ranges || {},
+      'copy',
+      userId
+    )
+  }
+  if (entityType === 'file') {
+    return await EditorController.promises.copyFile(
+      projectId,
+      targetFolderId,
+      entity,
+      name,
+      'copy',
+      userId
+    )
+  }
+  const newFolder = await EditorController.promises.addFolder(
+    projectId,
+    targetFolderId,
+    name,
+    'copy',
+    userId
+  )
+  for (const doc of entity.docs || []) {
+    await copyEntityTree(
+      projectId,
+      'doc',
+      doc,
+      newFolder._id,
+      doc.name,
+      userId
+    )
+  }
+  for (const file of entity.fileRefs || []) {
+    await copyEntityTree(
+      projectId,
+      'file',
+      file,
+      newFolder._id,
+      file.name,
+      userId
+    )
+  }
+  for (const folder of entity.folders || []) {
+    await copyEntityTree(
+      projectId,
+      'folder',
+      folder,
+      newFolder._id,
+      folder.name,
+      userId
+    )
+  }
+  return newFolder
+}
+
+async function copyEntity(req, res) {
+  const projectId = req.params.Project_id
+  const entityId = req.params.entity_id
+  const entityType = req.params.entity_type
+  const targetFolderId = req.body.folder_id
+  const name = String(req.body.name || '').trim()
+  if (
+    !['doc', 'file', 'folder'].includes(entityType) ||
+    !targetFolderId ||
+    !_nameIsAcceptableLength(name) ||
+    !SafePath.isCleanFilename(name)
+  ) {
+    return res.status(400).json({ message: 'Invalid copy request' })
+  }
+  const project = await ProjectGetter.promises.getProject(projectId, {
+    rootFolder: true,
+  })
+  const rootFolder = project?.rootFolder?.[0]
+  const targetFolder = rootFolder && findFolder(rootFolder, targetFolderId)
+  const entity = rootFolder && findEntity(rootFolder, entityId, entityType)
+  if (!targetFolder || !entity) {
+    return res.status(404).json({ message: 'File or folder not found' })
+  }
+  if (entityType === 'folder' && findFolder(entity, targetFolderId)) {
+    return res.status(422).json({
+      message: 'A folder cannot be copied into itself or one of its children',
+    })
+  }
+  if (folderHasName(targetFolder, name)) {
+    return res
+      .status(409)
+      .json({ message: 'A file or folder with this name already exists' })
+  }
+  const copied = await copyEntityTree(
+    projectId,
+    entityType,
+    entity,
+    targetFolderId,
+    name,
+    SessionManager.getLoggedInUserId(req.session)
+  )
+  res.status(201).json({ entity: copied })
 }
 
 async function deleteDoc(req, res, next) {

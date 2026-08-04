@@ -50,9 +50,20 @@ function FileTreeItemMenuItems() {
   return (
     <>
       {canRename ? (
-        <li role="none">
-          <DropdownItem onClick={startRenaming}>{t('rename')}</DropdownItem>
-        </li>
+        <>
+          <li role="none">
+            <DropdownItem onClick={startRenaming}>{t('rename')}</DropdownItem>
+          </li>
+          <li role="none">
+            <DropdownItem
+              onClick={() =>
+                window.dispatchEvent(new CustomEvent('file-tree.make-copy'))
+              }
+            >
+              Make a copy
+            </DropdownItem>
+          </li>
+        </>
       ) : null}
       {downloadPath ? (
         <li role="none">
