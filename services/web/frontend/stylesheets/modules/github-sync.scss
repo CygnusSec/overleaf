@@ -184,6 +184,15 @@
   line-height: 1.5;
 }
 
+.github-sync-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
 .github-sync-path-selector {
   display: grid;
   gap: var(--spacing-03);
