@@ -168,6 +168,12 @@ async function index(req, res) {
       enabled: Settings.backupManagerEnabled,
       encryptionConfigured: encryptionConfigured(),
       backupStoragePath: storagePath(),
+      s3: {
+        enabled: Settings.backupS3Enabled,
+        endpoint: Settings.backupS3Endpoint,
+        bucket: Settings.backupS3Bucket,
+        prefix: Settings.backupS3Prefix,
+      },
       notice: req.query.notice,
       error: req.query.error,
     }
