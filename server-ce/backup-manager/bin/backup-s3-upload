@@ -1,0 +1,111 @@
+#!/opt/backup-s3/bin/python3
+import hashlib
+import os
+import pathlib
+import sys
+
+import boto3
+from boto3.s3.transfer import TransferConfig
+from botocore.config import Config
+
+
+def required(name):
+    value = os.environ.get(name, "").strip()
+    if not value or value.startswith("replace-with-"):
+        raise ValueError(f"{name} is required when BACKUP_S3_ENABLED=true")
+    return value
+
+
+def sha256(path):
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def object_key(prefix, name):
+    prefix = prefix.strip("/")
+    return f"{prefix}/{name}" if prefix else name
+
+
+def main():
+    if len(sys.argv) != 2:
+        raise ValueError("Usage: backup-s3-upload /backups/<archive>.tar.gz.gpg")
+
+    archive = pathlib.Path(sys.argv[1]).resolve()
+    if not archive.is_file() or not archive.name.endswith(".tar.gz.gpg"):
+        raise ValueError("S3 upload requires an existing .tar.gz.gpg archive")
+    checksum_file = pathlib.Path(f"{archive}.sha256")
+    if not checksum_file.is_file():
+        raise ValueError(f"Checksum file is missing: {checksum_file}")
+
+    endpoint = required("BACKUP_S3_ENDPOINT")
+    bucket = required("BACKUP_S3_BUCKET")
+    access_key = required("BACKUP_S3_ACCESS_KEY_ID")
+    secret_key = required("BACKUP_S3_SECRET_ACCESS_KEY")
+    region = os.environ.get("BACKUP_S3_REGION", "us-east-1").strip() or "us-east-1"
+    prefix = os.environ.get("BACKUP_S3_PREFIX", "").strip()
+    addressing_style = (
+        "path"
+        if os.environ.get("BACKUP_S3_FORCE_PATH_STYLE", "false").lower() == "true"
+        else "auto"
+    )
+    attempts = max(1, min(int(os.environ.get("BACKUP_S3_UPLOAD_RETRIES", "3")), 10))
+
+    client = boto3.client(
+        "s3",
+        endpoint_url=endpoint,
+        region_name=region,
+        aws_access_key_id=access_key,
+        aws_secret_access_key=secret_key,
+        config=Config(
+            signature_version="s3v4",
+            retries={"mode": "standard", "max_attempts": attempts},
+            s3={"addressing_style": addressing_style},
+        ),
+    )
+    digest = sha256(archive)
+    archive_key = object_key(prefix, archive.name)
+    checksum_key = object_key(prefix, checksum_file.name)
+    metadata = {
+        "sha256": digest,
+        "application-image": os.environ.get("SHARELATEX_IMAGE", "unknown")[:1024],
+    }
+    transfer = TransferConfig(
+        multipart_threshold=64 * 1024 * 1024,
+        multipart_chunksize=64 * 1024 * 1024,
+    )
+
+    print(f"Uploading encrypted backup to s3://{bucket}/{archive_key}", flush=True)
+    client.upload_file(
+        str(archive),
+        bucket,
+        archive_key,
+        ExtraArgs={"Metadata": metadata, "ContentType": "application/pgp-encrypted"},
+        Config=transfer,
+    )
+    remote = client.head_object(Bucket=bucket, Key=archive_key)
+    if remote["ContentLength"] != archive.stat().st_size:
+        raise RuntimeError("S3 archive size verification failed")
+    if remote.get("Metadata", {}).get("sha256") != digest:
+        raise RuntimeError("S3 archive checksum metadata verification failed")
+
+    client.upload_file(
+        str(checksum_file),
+        bucket,
+        checksum_key,
+        ExtraArgs={"ContentType": "text/plain"},
+    )
+    checksum_remote = client.head_object(Bucket=bucket, Key=checksum_key)
+    if checksum_remote["ContentLength"] != checksum_file.stat().st_size:
+        raise RuntimeError("S3 checksum file size verification failed")
+    print(f"S3 upload verified: s3://{bucket}/{archive_key}", flush=True)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as error:
+        print(f"S3 upload failed: {error}", file=sys.stderr)
+        sys.exit(1)

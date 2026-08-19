@@ -1191,6 +1191,10 @@ module.exports = {
   backupStoragePath:
     process.env.BACKUP_STORAGE_PATH || '/var/lib/overleaf/backups',
   backupEncryptionPassphrase: process.env.BACKUP_ENCRYPTION_PASSPHRASE,
+  backupS3Enabled: process.env.BACKUP_S3_ENABLED === 'true',
+  backupS3Endpoint: process.env.BACKUP_S3_ENDPOINT,
+  backupS3Bucket: process.env.BACKUP_S3_BUCKET,
+  backupS3Prefix: process.env.BACKUP_S3_PREFIX,
   gitIntegrationEncryptionKey: process.env.GIT_INTEGRATION_ENCRYPTION_KEY,
   githubSyncClientId: process.env.GITHUB_SYNC_CLIENT_ID,
   githubSyncClientSecret: process.env.GITHUB_SYNC_CLIENT_SECRET,

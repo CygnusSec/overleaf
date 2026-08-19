@@ -74,7 +74,7 @@ prune_backups() {
 }
 
 run_backup() {
-  local output status backup_pid cancelled
+  local output status backup_pid cancelled local_archive remote_upload_status
   rm -f "$CANCEL_REQUEST"
   jq -n \
     --arg status "running" \
@@ -109,11 +109,17 @@ run_backup() {
   fi
   rm -f "$CANCEL_REQUEST"
   output="$(tail -c 32768 "$RUN_LOG")"
+  local_archive="$(sed -n 's/^LOCAL_BACKUP_CREATED=//p' "$RUN_LOG" | tail -n 1)"
+  remote_upload_status="$(sed -n 's/^REMOTE_UPLOAD_STATUS=//p' "$RUN_LOG" | tail -n 1)"
   jq -n \
     --arg status "$status" \
     --arg finishedAt "$(date --iso-8601=seconds)" \
     --arg message "$output" \
-    '{status: $status, finishedAt: $finishedAt, message: $message}' \
+    --arg localArchive "$local_archive" \
+    --arg remoteUploadStatus "$remote_upload_status" \
+    '{status: $status, finishedAt: $finishedAt, message: $message}
+      + if $localArchive == "" then {} else {localArchive: $localArchive} end
+      + if $remoteUploadStatus == "" then {} else {remoteUploadStatus: $remoteUploadStatus} end' \
     | write_shared_json "$STATUS"
   [[ "$status" == "success" ]]
 }
